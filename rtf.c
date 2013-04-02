@@ -17,9 +17,10 @@
  * Boston, MA 02111-1307, USA.
  */
 
-/* This is a Really Trivial Filter(tm) that catches some very common
- * spams that bogofilter cannot. It checks for keywords in the From
- * and Subject fields and for the existence of a From field.
+/* Bogofilter is great, but there are some spams it cannot catch and
+ * some ham it always marks as spam. The Really Trivial Filter(tm)
+ * tries to catches some very common spams that bogofilter cannot and
+ * whitelists some from fields.
  *
  * It returns 0 if the email is a spam, 1 if it is ham.
  *
