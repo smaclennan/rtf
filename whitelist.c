@@ -37,6 +37,9 @@
 
 /* SAM hardcode for now... */
 static char *whitelist[] = { "enbridge", "linkedin", NULL };
+#define BOGOFILTER "bogofilter -u"
+
+static char header[8096];
 
 
 static int filter(char *line)
@@ -50,18 +53,42 @@ static int filter(char *line)
 	return 0;
 }
 
+static int run_bogofilter(void)
+{
+	FILE *pfp = popen(BOGOFILTER, "w");
+	if (!pfp) {
+		syslog(LOG_WARNING, "bogofilter failed to start");
+		return 0;
+	}
+
+	fputs(header, pfp);
+
+	char line[1024];
+	while (fgets(line, sizeof(line), stdin))
+		fputs(line, pfp);
+
+	return WEXITSTATUS(pclose(pfp));
+
+}
+
 int main(int argc, char *argv[])
 {
-	char line[1024];
+	char *line = header;
+	int len = sizeof(header);
 
-	while (fgets(line, sizeof(line), stdin))
+	while (fgets(line, len, stdin)) {
 		if (*line == '\n')
 			break; /* end of header */
 		else if (strncmp(line, "From:", 5) == 0)
 			if (filter(line))
-				return 99; /* whitelist */
+				return 1; /* whitelist (non-spam) */
 
-	return 0; /* continue processing */
+		int n = strlen(line);
+		line += n;
+		len -= n;
+	}
+
+	return run_bogofilter();
 }
 
 /*
