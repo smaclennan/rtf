@@ -129,7 +129,8 @@ static int run_bogofilter(void)
 		return 0;
 	}
 
-	fputs(header, pfp);
+	if (*header)
+		fputs(header, pfp);
 
 	char line[1024];
 	while (fgets(line, sizeof(line), stdin))
