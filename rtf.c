@@ -33,6 +33,7 @@
 #include <unistd.h>
 #include <ctype.h>
 #include <syslog.h>
+#include <errno.h>
 
 #define BOGOFILTER "bogofilter -u"
 
@@ -64,14 +65,17 @@ oom:
 	syslog(LOG_WARNING, "Out of memory.");
 }
 
-static void read_config(const char *fname)
+static int read_config(const char *fname)
 {
 	struct entry **head = NULL;
 
 	FILE *fp = fopen(fname, "r");
 	if (!fp) {
-		syslog(LOG_WARNING, "%s: %m", fname);
-		exit(0);
+		if (errno != ENOENT) {
+			perror(fname);
+			syslog(LOG_WARNING, "%s: %m", fname);
+		}
+		return 1;
 	}
 
 	char line[128];
@@ -91,6 +95,7 @@ static void read_config(const char *fname)
 	}
 
 	fclose(fp);
+	return 0;
 }
 
 static int whitelist_filter(char *line)
@@ -144,30 +149,32 @@ int main(int argc, char *argv[])
 	snprintf(header, sizeof(header), "%s/.rtf", getenv("HOME"));
 	read_config(header);
 
-	while (fgets(line, len, stdin)) {
-		if (*line == '\n')
-			break; /* end of header */
-		else if (strncmp(line, "From:", 5) == 0) {
-			if (whitelist_filter(line))
-				return 1; /* don't redirect */
-			else if (blacklist_filter(line))
-				spam = 1; /* spam */
-			saw_from = 1;
-		} else if (strncmp(line, "Subject:", 8) == 0) {
-			if (whitelist_filter(line))
-				return 1; /* don't redirect */
-			else if (blacklist_filter(line))
-				spam = 1; /* spam */
-		} else if (strncmp(line, "Date:", 5) == 0)
-			saw_date = 1;
+	if (whitelist || blacklist) {
+		while (fgets(line, len, stdin)) {
+			if (*line == '\n')
+				break; /* end of header */
+			else if (strncmp(line, "From:", 5) == 0) {
+				if (whitelist_filter(line))
+					return 1; /* don't redirect */
+				else if (blacklist_filter(line))
+					spam = 1; /* spam */
+				saw_from = 1;
+			} else if (strncmp(line, "Subject:", 8) == 0) {
+				if (whitelist_filter(line))
+					return 1; /* don't redirect */
+				else if (blacklist_filter(line))
+					spam = 1; /* spam */
+			} else if (strncmp(line, "Date:", 5) == 0)
+				saw_date = 1;
 
-		n = strlen(line);
-		line += n;
-		len -= n;
+			n = strlen(line);
+			line += n;
+			len -= n;
+		}
+
+		if (spam == 1 || saw_from == 0 || saw_date == 0)
+			return 0; /* spam */
 	}
-
-	if (spam == 1 || saw_from == 0 || saw_date == 0)
-		return 0; /* spam */
 
 	if (run_bogo)
 		return run_bogofilter();
