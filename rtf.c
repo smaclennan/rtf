@@ -93,17 +93,24 @@ static void read_config(const char *fname)
 	fclose(fp);
 }
 
-static int filter(char *line)
+static int whitelist_filter(char *line)
 {
 	struct entry *e;
 
 	for (e = whitelist; e; e = e->next)
 		if (strcasestr(line, e->str))
-			return 0; /* not spam */
+			return 1; /* white listed */
+
+	return 0;
+}
+
+static int blacklist_filter(char *line)
+{
+	struct entry *e;
 
 	for (e = blacklist; e; e = e->next)
 		if (strcasestr(line, e->str))
-			return 1; /* spam */
+			return 1; /* black listed */
 
 	return 0;
 }
@@ -129,25 +136,28 @@ static int run_bogofilter(void)
 int main(int argc, char *argv[])
 {
 	char *line = header;
-	int n, len = sizeof(header);
+	int n, len = sizeof(header), spam = 0;
 	int saw_from = 0, saw_date = 0;
 
 	int run_bogo = argc > 1 && strcmp(argv[1], "-b") == 0;
 
-	snprintf(line, sizeof(line), "%s/.rtf", getenv("HOME"));
-	read_config(line);
+	snprintf(header, sizeof(header), "%s/.rtf", getenv("HOME"));
+	read_config(header);
 
 	while (fgets(line, len, stdin)) {
 		if (*line == '\n')
 			break; /* end of header */
 		else if (strncmp(line, "From:", 5) == 0) {
-			if (filter(line))
-				return 0; /* spam */
-			else
-				saw_from = 1;
+			if (whitelist_filter(line))
+				return 1; /* don't redirect */
+			else if (blacklist_filter(line))
+				spam = 1; /* spam */
+			saw_from = 1;
 		} else if (strncmp(line, "Subject:", 8) == 0) {
-			if (filter(line))
-				return 0; /* spam */
+			if (whitelist_filter(line))
+				return 1; /* don't redirect */
+			else if (blacklist_filter(line))
+				spam = 1; /* spam */
 		} else if (strncmp(line, "Date:", 5) == 0)
 			saw_date = 1;
 
@@ -156,7 +166,7 @@ int main(int argc, char *argv[])
 		len -= n;
 	}
 
-	if (saw_from == 0 || saw_date == 0)
+	if (spam == 1 || saw_from == 0 || saw_date == 0)
 		return 0; /* spam */
 
 	if (run_bogo)
