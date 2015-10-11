@@ -132,6 +132,8 @@ int main(int argc, char *argv[])
 	int n, len = sizeof(header);
 	int saw_from = 0, saw_date = 0;
 
+	int run_bogo = argc > 1 && strcmp(argv[1], "-b") == 0;
+
 	snprintf(line, sizeof(line), "%s/.rtf", getenv("HOME"));
 	read_config(line);
 
@@ -157,11 +159,10 @@ int main(int argc, char *argv[])
 	if (saw_from == 0 || saw_date == 0)
 		return 0; /* spam */
 
-#if 0
-	return 1; /* don't redirect */
-#else
-	return run_bogofilter();
-#endif
+	if (run_bogo)
+		return run_bogofilter();
+	else
+		return 1; /* don't redirect */
 }
 
 /*
