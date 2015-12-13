@@ -19,11 +19,10 @@
  * spams that bogofilter cannot. It checks for keywords in the From
  * and Subject fields and for the existence of From and Date fields.
  *
- * It has both a blacklist and a whitelist and looks in $HOME/.rtf.
+ * $HOME/.rtf can have both a blacklist and a whitelist.
  *
- * It returns 0 if the email is a spam, 1 if it is ham.
- *
- * I use it with a condredirect from my .qmail file.
+ * If bogofilter finds spam, it is moved to $HOME/Maildir/.Spam/cur
+ * and is marked as read.
  */
 
 #define _GNU_SOURCE /* for strcasestr */
@@ -53,6 +52,58 @@ static char header[8096];
 #define PATH_SIZE 136
 
 static char tmp_file[84], tmp_path[PATH_SIZE];
+
+/* Not NFS safe and I don't care */
+static int create_tmp_file(const char *home)
+{
+	char hostname[64];
+	if (gethostname(hostname, sizeof(hostname))) {
+		syslog(LOG_ERR, "Hostname: %m");
+		return -1;
+	}
+
+	const char *dtline = getenv("DTLINE");
+	const char *rpline = getenv("RPLINE");
+	if (!dtline || !rpline) {
+		syslog(LOG_ERR, "Missing required environment variables.");
+		return -1;
+	}
+
+	snprintf(tmp_file, sizeof(tmp_file), "%ld.%d.%s",
+			 time(NULL), getpid(), hostname);
+	snprintf(tmp_path, sizeof(tmp_path), "%s/Maildir/tmp/%s", home, tmp_file);
+	int fd = creat(tmp_path, 0644);
+	if (fd < 0) {
+		syslog(LOG_ERR, "%s: %m", tmp_path);
+		return -1;
+	}
+
+	/* Sanitize the environment variables */
+	const char *p;
+	for (p = rpline; *p; ++p)
+		if (isascii(*p))
+			if (write(fd, p, 1) != 1)
+				goto write_error;
+	for (p = dtline; *p; ++p)
+		if (isascii(*p))
+			if (write(fd, p, 1) != 1)
+				goto write_error;
+
+	do {
+		int n, len = strlen(header);
+		if ((n = write(fd, header, len)) != len)
+			goto write_error;
+	} while (fgets(header, sizeof(header), stdin));
+
+	close(fd);
+	return 0;
+
+write_error:
+	syslog(LOG_ERR, "%s: write error", tmp_path);
+	close(fd);
+	unlink(tmp_file);
+	return -1;
+}
 
 static void add_entry(struct entry **head, const char *str)
 {
@@ -127,6 +178,50 @@ static int blacklist_filter(char *line)
 	return 0;
 }
 
+static void filter(const char *home)
+{
+	char *line = header;
+	int n, len = sizeof(header), spam = 0;
+	int saw_from = 0, saw_date = 0;
+
+	while (fgets(line, len, stdin)) {
+		if (*line == '\n')
+			break; /* end of header */
+		else if (strncmp(line, "From:", 5) == 0) {
+			if (whitelist_filter(line))
+				exit(0); /* continue */
+			else if (blacklist_filter(line))
+				spam = 1; /* spam */
+			saw_from = 1;
+		} else if (strncmp(line, "Subject:", 8) == 0) {
+			if (whitelist_filter(line))
+				exit(0); /* continue */
+			else if (blacklist_filter(line))
+				spam = 1; /* spam */
+		} else if (strncmp(line, "Date:", 5) == 0)
+			saw_date = 1;
+
+		n = strlen(line);
+		line += n;
+		len -= n;
+	}
+
+	if (spam == 1 || saw_from == 0 || saw_date == 0) {
+		char path[PATH_SIZE];
+
+		if (create_tmp_file(home))
+			exit(0); /* continue */
+
+		snprintf(path, sizeof(path), "%s/Maildir/.Spam/cur/%s:2,S", home, tmp_file);
+		if (rename(tmp_path, path)) {
+			syslog(LOG_WARNING, "%s: %m", path);
+			unlink(tmp_path);
+			exit(0); /* continue */
+		}
+
+		exit(99); /* don't continue - we handled it */
+	}
+}
 
 static int run_bogofilter(const char *fname)
 {
@@ -135,64 +230,10 @@ static int run_bogofilter(const char *fname)
 	return WEXITSTATUS(system(cmd));
 }
 
-/* Not NFS safe and I don't care */
-static int create_tmp_file(const char *home)
-{
-	char hostname[64];
-	if (gethostname(hostname, sizeof(hostname))) {
-		syslog(LOG_ERR, "Hostname: %m");
-		return -1;
-	}
-
-	const char *dtline = getenv("DTLINE");
-	const char *rpline = getenv("RPLINE");
-	if (!dtline || !rpline) {
-		syslog(LOG_ERR, "Missing required environment variables.");
-		return -1;
-	}
-
-	snprintf(tmp_file, sizeof(tmp_file), "%ld.%d.%s",
-			 time(NULL), getpid(), hostname);
-	snprintf(tmp_path, sizeof(tmp_path), "%s/Maildir/tmp/%s", home, tmp_file);
-	int fd = creat(tmp_path, 0644);
-	if (fd < 0) {
-		syslog(LOG_ERR, "%s: %m", tmp_path);
-		return -1;
-	}
-
-	/* Sanitize the environment variables */
-	const char *p;
-	for (p = rpline; *p; ++p)
-		if (isascii(*p))
-			if (write(fd, p, 1) != 1)
-				goto write_error;
-	for (p = dtline; *p; ++p)
-		if (isascii(*p))
-			if (write(fd, p, 1) != 1)
-				goto write_error;
-
-	do {
-		int n, len = strlen(header);
-		if ((n = write(fd, header, len)) != len)
-			goto write_error;
-	} while (fgets(header, sizeof(header), stdin));
-
-	close(fd);
-	return 0;
-
-write_error:
-	syslog(LOG_ERR, "%s: write error", tmp_path);
-	close(fd);
-	unlink(tmp_file);
-	return -1;
-}
-
 int main(int argc, char *argv[])
 {
-	char path[PATH_SIZE], *line = header;
+	char path[PATH_SIZE];
 	const char *home = getenv("HOME");
-	int n, len = sizeof(header), spam = 0;
-	int saw_from = 0, saw_date = 0;
 	int run_bogo = argc > 1 && strcmp(argv[1], "-b") == 0;
 
 	if (!home) {
@@ -203,43 +244,8 @@ int main(int argc, char *argv[])
 	snprintf(path, sizeof(path), "%s/.rtf", home);
 	read_config(path);
 
-	if (whitelist || blacklist) {
-		while (fgets(line, len, stdin)) {
-			if (*line == '\n')
-				break; /* end of header */
-			else if (strncmp(line, "From:", 5) == 0) {
-				if (whitelist_filter(line))
-					return 0; /* continue */
-				else if (blacklist_filter(line))
-					spam = 1; /* spam */
-				saw_from = 1;
-			} else if (strncmp(line, "Subject:", 8) == 0) {
-				if (whitelist_filter(line))
-					return 0; /* continue */
-				else if (blacklist_filter(line))
-					spam = 1; /* spam */
-			} else if (strncmp(line, "Date:", 5) == 0)
-				saw_date = 1;
-
-			n = strlen(line);
-			line += n;
-			len -= n;
-		}
-
-		if (spam == 1 || saw_from == 0 || saw_date == 0) {
-			if (create_tmp_file(home))
-				return 0; /* continue */
-
-			snprintf(path, sizeof(path), "%s/Maildir/.Spam/cur/%s:2,S", home, tmp_file);
-			if (rename(tmp_path, path)) {
-				syslog(LOG_WARNING, "%s: %m", path);
-				unlink(tmp_path);
-				return 0; /* continue */
-			}
-
-			return 99; /* don't continue - we handled it */
-		}
-	}
+	if (whitelist || blacklist)
+		filter(home);
 
 	if (run_bogo) {
 		if (create_tmp_file(home))
