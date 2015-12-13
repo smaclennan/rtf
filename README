@@ -5,14 +5,11 @@ and Ham.
 
 My .qmail file is two lines and looks like this:
 
-|condredirect <username>-spam /home/seanm/bin/rtf -b
+|/home/seanm/bin/rtf -b
 ./Maildir/
 
-You could replace rtf with bogofilter directly.
-
-My .qmail-spam looks like this:
-
-./Maildir/.Spam/
+The ./Maildir/ is just to handle error conditions. If there are no
+errors, rtf returns 99.
 
 So spam will get redirected to the Spam folder and normal mail is
 handled normally.
