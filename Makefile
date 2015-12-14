@@ -1,10 +1,8 @@
 CFLAGS += -Wall -O2
 
-all: rtf
-
-rtf: rtf.c
+all: rtf learnem
 
 mailhdrsize: mailhdrsize.c
 
 clean:
-	rm -f rtf mailhdrsize
+	rm -f rtf learnem mailhdrsize
