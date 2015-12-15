@@ -20,7 +20,5 @@ the LearnSPAM folder.
 If an email is marked as spam, but it really ham, I copy (not move)
 the email to the Ham folder.
 
-At a set time every day, cron runs the learnem.sh script. All the
-files in the LearnSPAM folder are re-classified as spam and moved to
-the Spam folder. All the files in the Ham folder are re-classified
-as ham and removed.
+The daemon `learnem' runs and handles processing the .LearnSPAM and
+.Ham directories.
