@@ -48,7 +48,7 @@ struct entry {
 struct entry *whitelist;
 struct entry *blacklist;
 
-static char header[8096];
+static char buff[8096];
 
 /* /home/<user 32>/Maildir/tmp/<time 10>.<pid 5>.<hostname 64> */
 #define PATH_SIZE 136
@@ -93,8 +93,8 @@ static int create_tmp_file(const char *home)
 
 	/* Read the email */
 	int n;
-	while ((n = read(0, header, sizeof(header))) > 0)
-		if (write(fd, header, n) != n)
+	while ((n = read(0, buff, sizeof(buff))) > 0)
+		if (write(fd, buff, n) != n)
 			goto write_error;
 
 	if (n < 0)
@@ -219,9 +219,7 @@ static int list_filter(char *line, struct entry *head)
 
 static void filter(int fd, const char *home)
 {
-	char *line = header;
-	int len = sizeof(header), is_spam = 0;
-	int saw_from = 0, saw_date = 0;
+	int is_spam = 0, saw_from = 0, saw_date = 0;
 
 	FILE *fp = fopen(tmp_path, "r");
 	if (!fp) {
@@ -230,23 +228,23 @@ static void filter(int fd, const char *home)
 		exit(0);
 	}
 
-	while (fgets(line, len, fp)) {
-		if (*line == '\n')
-			break; /* end of header */
-		else if (strncmp(line, "From:", 5) == 0) {
-			if (list_filter(line, whitelist)) {
+	while (fgets(buff, sizeof(buff), fp)) {
+		if (*buff == '\n')
+			break; /* end of buff */
+		else if (strncmp(buff, "From:", 5) == 0) {
+			if (list_filter(buff, whitelist)) {
 				fclose(fp);
 				ham(home);
-			} else if (list_filter(line, blacklist))
+			} else if (list_filter(buff, blacklist))
 				is_spam = 1; /* spam */
 			saw_from = 1;
-		} else if (strncmp(line, "Subject:", 8) == 0) {
-			if (list_filter(line, whitelist)) {
+		} else if (strncmp(buff, "Subject:", 8) == 0) {
+			if (list_filter(buff, whitelist)) {
 				fclose(fp);
 				ham(home);
-			} else if (list_filter(line, blacklist))
+			} else if (list_filter(buff, blacklist))
 				is_spam = 1; /* spam */
-		} else if (strncmp(line, "Date:", 5) == 0)
+		} else if (strncmp(buff, "Date:", 5) == 0)
 			saw_date = 1;
 	}
 
