@@ -36,7 +36,9 @@
 #include <errno.h>
 #include <time.h>
 
-#define BOGOFILTER "bogofilter -u"
+#define BOGOFILTER "bogofilter"
+
+static int run_bogo;
 
 struct entry {
 	const char *str;
@@ -156,24 +158,44 @@ static int read_config(const char *fname)
 	return 0;
 }
 
-static int whitelist_filter(char *line)
+static int run_bogofilter(const char *fname, char *flags)
 {
-	struct entry *e;
-
-	for (e = whitelist; e; e = e->next)
-		if (strcasestr(line, e->str))
-			return 1; /* white listed */
-
-	return 0;
+	char cmd[256];
+	snprintf(cmd, sizeof(cmd) - 3, "%s %s -B %s", BOGOFILTER, flags, fname);
+	return WEXITSTATUS(system(cmd));
 }
 
-static int blacklist_filter(char *line)
+/* Does not return */
+static void ham(const char *home)
+{
+	if (run_bogo) {
+		char path[PATH_SIZE];
+
+		if (create_tmp_file(home))
+			exit(0); /* continue */
+
+		/* Tell bogofilter this is ham */
+		run_bogofilter(tmp_path, "-n");
+
+		snprintf(path, sizeof(path), "%s/Maildir/new/%s", home, tmp_file);
+		if (rename(tmp_path, path)) {
+			syslog(LOG_WARNING, "%s: %m", path);
+			unlink(tmp_path);
+			exit(0); /* continue */
+		}
+
+		exit(99); /* don't continue - we handled it */
+	} else
+		exit(0);
+}
+
+static int list_filter(char *line, struct entry *head)
 {
 	struct entry *e;
 
-	for (e = blacklist; e; e = e->next)
+	for (e = head; e; e = e->next)
 		if (strcasestr(line, e->str))
-			return 1; /* black listed */
+			return 1;
 
 	return 0;
 }
@@ -188,15 +210,15 @@ static void filter(const char *home)
 		if (*line == '\n')
 			break; /* end of header */
 		else if (strncmp(line, "From:", 5) == 0) {
-			if (whitelist_filter(line))
-				exit(0); /* continue */
-			else if (blacklist_filter(line))
+			if (list_filter(line, whitelist))
+				ham(home);
+			else if (list_filter(line, blacklist))
 				spam = 1; /* spam */
 			saw_from = 1;
 		} else if (strncmp(line, "Subject:", 8) == 0) {
-			if (whitelist_filter(line))
-				exit(0); /* continue */
-			else if (blacklist_filter(line))
+			if (list_filter(line, whitelist))
+				ham(home);
+			else if (list_filter(line, blacklist))
 				spam = 1; /* spam */
 		} else if (strncmp(line, "Date:", 5) == 0)
 			saw_date = 1;
@@ -212,6 +234,10 @@ static void filter(const char *home)
 		if (create_tmp_file(home))
 			exit(0); /* continue */
 
+		/* Tell bogofilter this is spam */
+		if (run_bogo)
+			run_bogofilter(tmp_path, "-s");
+
 		snprintf(path, sizeof(path), "%s/Maildir/.Spam/cur/%s:2,S", home, tmp_file);
 		if (rename(tmp_path, path)) {
 			syslog(LOG_WARNING, "%s: %m", path);
@@ -223,18 +249,12 @@ static void filter(const char *home)
 	}
 }
 
-static int run_bogofilter(const char *fname)
-{
-	char cmd[256];
-	snprintf(cmd, sizeof(cmd), "%s -B %s", BOGOFILTER, fname);
-	return WEXITSTATUS(system(cmd));
-}
-
 int main(int argc, char *argv[])
 {
 	char path[PATH_SIZE];
 	const char *home = getenv("HOME");
-	int run_bogo = argc > 1 && strcmp(argv[1], "-b") == 0;
+
+	run_bogo = argc > 1 && strcmp(argv[1], "-b") == 0;
 
 	if (!home) {
 		syslog(LOG_WARNING, "You are homeless!");
@@ -251,7 +271,7 @@ int main(int argc, char *argv[])
 		if (create_tmp_file(home))
 			return 0; /* continue */
 
-		if (run_bogofilter(tmp_path) == 0)
+		if (run_bogofilter(tmp_path, "-u") == 0)
 			/* spam */
 			snprintf(path, sizeof(path), "%s/Maildir/.Spam/cur/%s:2,S", home, tmp_file);
 		else
