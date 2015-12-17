@@ -55,7 +55,7 @@ static char header[8096];
 
 static char tmp_file[84], tmp_path[PATH_SIZE];
 
-/* Not NFS safe and I don't care */
+/* Not NFS safe and I don't care. */
 static int create_tmp_file(const char *home)
 {
 	char hostname[64];
@@ -91,13 +91,17 @@ static int create_tmp_file(const char *home)
 			if (write(fd, p, 1) != 1)
 				goto write_error;
 
-	do {
-		int n, len = strlen(header);
-		if ((n = write(fd, header, len)) != len)
+	/* Read the email */
+	int n;
+	while ((n = read(0, header, sizeof(header))) > 0)
+		if (write(fd, header, n) != n)
 			goto write_error;
-	} while (fgets(header, sizeof(header), stdin));
+
+	if (n < 0)
+		goto write_error;
 
 	close(fd);
+
 	return 0;
 
 write_error:
@@ -160,33 +164,46 @@ static int read_config(const char *fname)
 
 static int run_bogofilter(const char *fname, char *flags)
 {
-	char cmd[256];
-	snprintf(cmd, sizeof(cmd) - 3, "%s %s -B %s", BOGOFILTER, flags, fname);
-	return WEXITSTATUS(system(cmd));
+	if (run_bogo) {
+		char cmd[256];
+		snprintf(cmd, sizeof(cmd) - 3, "%s %s -B %s", BOGOFILTER, flags, fname);
+		return WEXITSTATUS(system(cmd));
+	} else
+		return 1; /* mark as non-spam */
 }
 
-/* Does not return */
+static int good(const char *home)
+{
+	char path[PATH_SIZE];
+	snprintf(path, sizeof(path), "%s/Maildir/new/%s", home, tmp_file);
+	if (rename(tmp_path, path)) {
+		syslog(LOG_WARNING, "%s: %m", path);
+		unlink(tmp_path);
+		return 0; /* continue */
+	}
+
+	return 99; /* don't continue - we handled it */
+}
+
+static void spam(const char *home)
+{
+	char path[PATH_SIZE];
+	snprintf(path, sizeof(path), "%s/Maildir/.Spam/cur/%s:2,S", home, tmp_file);
+	if (rename(tmp_path, path)) {
+		syslog(LOG_WARNING, "%s: %m", path);
+		unlink(tmp_path);
+		exit(0); /* continue */
+	}
+
+	exit(99); /* don't continue - we handled it */
+}
+
 static void ham(const char *home)
 {
-	if (run_bogo) {
-		char path[PATH_SIZE];
+	/* Tell bogofilter this is ham */
+	run_bogofilter(tmp_path, "-n");
 
-		if (create_tmp_file(home))
-			exit(0); /* continue */
-
-		/* Tell bogofilter this is ham */
-		run_bogofilter(tmp_path, "-n");
-
-		snprintf(path, sizeof(path), "%s/Maildir/new/%s", home, tmp_file);
-		if (rename(tmp_path, path)) {
-			syslog(LOG_WARNING, "%s: %m", path);
-			unlink(tmp_path);
-			exit(0); /* continue */
-		}
-
-		exit(99); /* don't continue - we handled it */
-	} else
-		exit(0);
+	exit(good(home));
 }
 
 static int list_filter(char *line, struct entry *head)
@@ -200,52 +217,46 @@ static int list_filter(char *line, struct entry *head)
 	return 0;
 }
 
-static void filter(const char *home)
+static void filter(int fd, const char *home)
 {
 	char *line = header;
-	int n, len = sizeof(header), spam = 0;
+	int len = sizeof(header), is_spam = 0;
 	int saw_from = 0, saw_date = 0;
 
-	while (fgets(line, len, stdin)) {
+	FILE *fp = fopen(tmp_path, "r");
+	if (!fp) {
+		syslog(LOG_WARNING, "%s: %m", tmp_path);
+		unlink(tmp_path);
+		exit(0);
+	}
+
+	while (fgets(line, len, fp)) {
 		if (*line == '\n')
 			break; /* end of header */
 		else if (strncmp(line, "From:", 5) == 0) {
-			if (list_filter(line, whitelist))
+			if (list_filter(line, whitelist)) {
+				fclose(fp);
 				ham(home);
-			else if (list_filter(line, blacklist))
-				spam = 1; /* spam */
+			} else if (list_filter(line, blacklist))
+				is_spam = 1; /* spam */
 			saw_from = 1;
 		} else if (strncmp(line, "Subject:", 8) == 0) {
-			if (list_filter(line, whitelist))
+			if (list_filter(line, whitelist)) {
+				fclose(fp);
 				ham(home);
-			else if (list_filter(line, blacklist))
-				spam = 1; /* spam */
+			} else if (list_filter(line, blacklist))
+				is_spam = 1; /* spam */
 		} else if (strncmp(line, "Date:", 5) == 0)
 			saw_date = 1;
-
-		n = strlen(line);
-		line += n;
-		len -= n;
 	}
 
-	if (spam == 1 || saw_from == 0 || saw_date == 0) {
-		char path[PATH_SIZE];
+	fclose(fp);
 
-		if (create_tmp_file(home))
-			exit(0); /* continue */
-
+	if (is_spam == 1 || saw_from == 0 || saw_date == 0) {
 		/* Tell bogofilter this is spam */
-		if (run_bogo)
-			run_bogofilter(tmp_path, "-s");
+		run_bogofilter(tmp_path, "-s");
 
-		snprintf(path, sizeof(path), "%s/Maildir/.Spam/cur/%s:2,S", home, tmp_file);
-		if (rename(tmp_path, path)) {
-			syslog(LOG_WARNING, "%s: %m", path);
-			unlink(tmp_path);
-			exit(0); /* continue */
-		}
-
-		exit(99); /* don't continue - we handled it */
+		spam(home);
 	}
 }
 
@@ -253,41 +264,26 @@ int main(int argc, char *argv[])
 {
 	char path[PATH_SIZE];
 	const char *home = getenv("HOME");
-
-	run_bogo = argc > 1 && strcmp(argv[1], "-b") == 0;
-
 	if (!home) {
 		syslog(LOG_WARNING, "You are homeless!");
 		return 0; /* continue */
 	}
 
+	run_bogo = argc > 1 && strcmp(argv[1], "-b") == 0;
+
 	snprintf(path, sizeof(path), "%s/.rtf", home);
 	read_config(path);
 
-	if (whitelist || blacklist)
-		filter(home);
+	int fd = create_tmp_file(home);
+	if (fd < 0)
+		return 0; /* continue */
 
-	if (run_bogo) {
-		if (create_tmp_file(home))
-			return 0; /* continue */
+	filter(fd, home);
 
-		if (run_bogofilter(tmp_path, "-u") == 0)
-			/* spam */
-			snprintf(path, sizeof(path), "%s/Maildir/.Spam/cur/%s:2,S", home, tmp_file);
-		else
-			/* good */
-			snprintf(path, sizeof(path), "%s/Maildir/new/%s", home, tmp_file);
+	if (run_bogofilter(tmp_path, "-u") == 0)
+		spam(home);
 
-		if (rename(tmp_path, path)) {
-			syslog(LOG_WARNING, "%s: %m", path);
-			unlink(tmp_path);
-			return 0; /* continue */
-		}
-
-		return 99; /* don't continue - we handled it */
-	}
-
-	return 0; /* continue */
+	return good(home);
 }
 
 /*
