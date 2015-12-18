@@ -45,13 +45,15 @@ struct entry {
 	struct entry *next;
 };
 
-struct entry *whitelist;
-struct entry *blacklist;
+static struct entry *whitelist;
+static struct entry *blacklist;
 
 static char buff[8096];
 
-/* /home/<user 32>/Maildir/tmp/<time 10>.<pid 5>.<hostname 64> */
-#define PATH_SIZE 136
+/* /home/<user 32>/Maildir/tmp/<time 10>.<pid 5>.<hostname 64>
+ * /home/<user 32>/Maildir/.Spam/cur/<time 10>.<pid 5>.<hostname 64>:2,S
+ */
+#define PATH_SIZE 144
 
 static char tmp_file[84], tmp_path[PATH_SIZE];
 
@@ -172,23 +174,8 @@ static int run_bogofilter(const char *fname, char *flags)
 		return 1; /* mark as non-spam */
 }
 
-static int good(const char *home)
+static void safe_rename(const char *path)
 {
-	char path[PATH_SIZE];
-	snprintf(path, sizeof(path), "%s/Maildir/new/%s", home, tmp_file);
-	if (rename(tmp_path, path)) {
-		syslog(LOG_WARNING, "%s: %m", path);
-		unlink(tmp_path);
-		return 0; /* continue */
-	}
-
-	return 99; /* don't continue - we handled it */
-}
-
-static void spam(const char *home)
-{
-	char path[PATH_SIZE];
-	snprintf(path, sizeof(path), "%s/Maildir/.Spam/cur/%s:2,S", home, tmp_file);
 	if (rename(tmp_path, path)) {
 		syslog(LOG_WARNING, "%s: %m", path);
 		unlink(tmp_path);
@@ -200,10 +187,16 @@ static void spam(const char *home)
 
 static void ham(const char *home)
 {
-	/* Tell bogofilter this is ham */
-	run_bogofilter(tmp_path, "-n");
+	char path[PATH_SIZE];
+	snprintf(path, sizeof(path), "%s/Maildir/new/%s", home, tmp_file);
+	safe_rename(path);
+}
 
-	exit(good(home));
+static void spam(const char *home)
+{
+	char path[PATH_SIZE];
+	snprintf(path, sizeof(path), "%s/Maildir/.Spam/cur/%s:2,S", home, tmp_file);
+	safe_rename(path);
 }
 
 static int list_filter(char *line, struct entry *head)
@@ -219,7 +212,7 @@ static int list_filter(char *line, struct entry *head)
 
 static void filter(int fd, const char *home)
 {
-	int is_spam = 0, saw_from = 0, saw_date = 0;
+	int is_ham = 0, is_spam = 0, saw_from = 0, saw_date = 0;
 
 	FILE *fp = fopen(tmp_path, "r");
 	if (!fp) {
@@ -232,17 +225,15 @@ static void filter(int fd, const char *home)
 		if (*buff == '\n')
 			break; /* end of buff */
 		else if (strncmp(buff, "From:", 5) == 0) {
-			if (list_filter(buff, whitelist)) {
-				fclose(fp);
-				ham(home);
-			} else if (list_filter(buff, blacklist))
+			if (list_filter(buff, whitelist))
+				is_ham = 1;
+			else if (list_filter(buff, blacklist))
 				is_spam = 1; /* spam */
 			saw_from = 1;
 		} else if (strncmp(buff, "Subject:", 8) == 0) {
-			if (list_filter(buff, whitelist)) {
-				fclose(fp);
-				ham(home);
-			} else if (list_filter(buff, blacklist))
+			if (list_filter(buff, whitelist))
+				is_ham = 1;
+			else if (list_filter(buff, blacklist))
 				is_spam = 1; /* spam */
 		} else if (strncmp(buff, "Date:", 5) == 0)
 			saw_date = 1;
@@ -250,10 +241,14 @@ static void filter(int fd, const char *home)
 
 	fclose(fp);
 
+	if (is_ham == 1) {
+		/* Tell bogofilter this is ham */
+		run_bogofilter(tmp_path, "-n");
+		ham(home);
+	}
 	if (is_spam == 1 || saw_from == 0 || saw_date == 0) {
 		/* Tell bogofilter this is spam */
 		run_bogofilter(tmp_path, "-s");
-
 		spam(home);
 	}
 }
@@ -281,7 +276,8 @@ int main(int argc, char *argv[])
 	if (run_bogofilter(tmp_path, "-u") == 0)
 		spam(home);
 
-	return good(home);
+	ham(home);
+	return 0; /* unreached */
 }
 
 /*

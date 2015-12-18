@@ -11,9 +11,6 @@ My .qmail file is two lines and looks like this:
 The ./Maildir/ is just to handle error conditions. If there are no
 errors, rtf returns 99.
 
-So spam will get redirected to the Spam folder and normal mail is
-handled normally.
-
 If an email is marked as ham but is really spam, I move the email to
 the LearnSPAM folder.
 
