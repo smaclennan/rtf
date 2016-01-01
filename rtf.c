@@ -1,5 +1,5 @@
 /* rtf.c - Really Trivial Filter
- * Copyright (C) 2012-2015 Sean MacLennan <seanm@seanm.ca>
+ * Copyright (C) 2012-2016 Sean MacLennan <seanm@seanm.ca>
  *
  * This program is free software: you can redistribute it and/or modify
  * it under the terms of the GNU General Public License as published by
@@ -15,14 +15,12 @@
  * along with this program.  If not, see <http://www.gnu.org/licenses/>.
  */
 
-/* This is a Really Trivial Filter(tm) that catches some very common
- * spams that bogofilter cannot. It checks for keywords in the From
- * and Subject fields and for the existence of From and Date fields.
+/* This is a Really Trivial Filter(tm) that allows for white lists,
+ * black lists, and ignore lists.
  *
- * $HOME/.rtf can have both a blacklist and a whitelist.
+ * If the email is missing the from or date fields it is considered spam.
  *
- * If bogofilter finds spam, it is moved to $HOME/Maildir/.Spam/cur
- * and is marked as read.
+ * It also optionally runs the emails through bogofilter.
  */
 
 #define _GNU_SOURCE /* for strcasestr */
@@ -306,9 +304,3 @@ int main(int argc, char *argv[])
 	ham(home);
 	return 0; /* unreached */
 }
-
-/*
- * Local Variables:
- * compile-command: "gcc -O3 -Wall rtf.c -o rtf"
- * End:
- */

@@ -169,9 +169,3 @@ int main(int argc, char *argv[])
 
 	return 0;
 }
-
-/*
- * Local Variables:
- * compile-command: "gcc -O3 -Wall learnem.c -o learnem"
- * End:
- */

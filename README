@@ -1,7 +1,8 @@
 qmail + rtf + bogofilter
 
 I have three folders in my Maildir to handle spam: Spam, LearnSPAM,
-and Ham.
+and Ham. I also have one folder to handle emails I am ignoring:
+Ignore.
 
 My .qmail file is two lines and looks like this:
 
@@ -11,6 +12,8 @@ My .qmail file is two lines and looks like this:
 The ./Maildir/ is just to handle error conditions. If there are no
 errors, rtf returns 99.
 
+Spam is moved to the Spam directory and marked as read.
+
 If an email is marked as ham but is really spam, I move the email to
 the LearnSPAM folder.
 
@@ -19,3 +22,8 @@ the email to the Ham folder.
 
 The daemon `learnem' runs and handles processing the .LearnSPAM and
 .Ham directories.
+
+The Ignore directory is email from legitimate sources, such as stores
+I have purchased from, that I really don't care about. So I move them
+into an Ignore directory and mark them read. After a week, they are
+deleted.
