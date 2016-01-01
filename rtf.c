@@ -37,6 +37,7 @@
 #include <time.h>
 
 #define BOGOFILTER "bogofilter"
+#define IGNOREDIR ".Ignore"
 
 static int run_bogo;
 
@@ -47,6 +48,7 @@ struct entry {
 
 static struct entry *whitelist;
 static struct entry *blacklist;
+static struct entry *ignorelist;
 
 static char buff[8096];
 
@@ -156,6 +158,10 @@ static int read_config(const char *fname)
 				head = &blacklist;
 			else if (strcmp(line, "[filter]") == 0)
 				head = &blacklist;
+			else if (strcmp(line, "[ignore]") == 0)
+				head = &ignorelist;
+			else
+				syslog(LOG_INFO, "Unexpected: %s\n", line);
 		} else if (head)
 			add_entry(head, line);
 	}
@@ -199,6 +205,13 @@ static void spam(const char *home)
 	safe_rename(path);
 }
 
+static void ignore(const char *home)
+{   /* Move to ignore and mark as read */
+	char path[PATH_SIZE];
+	snprintf(path, sizeof(path), "%s/Maildir/%s/cur/%s:2,S", home, IGNOREDIR, tmp_file);
+	safe_rename(path);
+}
+
 static int list_filter(char *line, struct entry *head)
 {
 	struct entry *e;
@@ -212,7 +225,7 @@ static int list_filter(char *line, struct entry *head)
 
 static void filter(int fd, const char *home)
 {
-	int is_ham = 0, is_spam = 0, saw_from = 0, saw_date = 0;
+	int is_ham = 0, is_spam = 0, is_ignored = 0, saw_from = 0, saw_date = 0;
 
 	FILE *fp = fopen(tmp_path, "r");
 	if (!fp) {
@@ -225,22 +238,36 @@ static void filter(int fd, const char *home)
 		if (*buff == '\n')
 			break; /* end of buff */
 		else if (strncmp(buff, "From:", 5) == 0) {
-			if (list_filter(buff, whitelist))
+			if (list_filter(buff, ignorelist)) {
+				is_ignored = 1;
+				break;
+			} else if (list_filter(buff, whitelist)) {
 				is_ham = 1;
-			else if (list_filter(buff, blacklist))
+				break;
+			} else if (list_filter(buff, blacklist)) {
 				is_spam = 1; /* spam */
+				break;
+			}
 			saw_from = 1;
 		} else if (strncmp(buff, "Subject:", 8) == 0) {
-			if (list_filter(buff, whitelist))
+			if (list_filter(buff, whitelist)) {
 				is_ham = 1;
-			else if (list_filter(buff, blacklist))
+				break;
+			} else if (list_filter(buff, blacklist)) {
 				is_spam = 1; /* spam */
+				break;
+			}
 		} else if (strncmp(buff, "Date:", 5) == 0)
 			saw_date = 1;
 	}
 
 	fclose(fp);
 
+	if (is_ignored) {
+		/* Tell bogofilter this is ham */
+		run_bogofilter(tmp_path, "-n");
+		ignore(home);
+	}
 	if (is_ham == 1) {
 		/* Tell bogofilter this is ham */
 		run_bogofilter(tmp_path, "-n");
