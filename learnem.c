@@ -130,6 +130,7 @@ int main(int argc, char *argv[])
 	snprintf(spam_dir, sizeof(spam_dir), "%s/Maildir/%s/cur", home, SPAM_DIR);
 
 	struct pollfd fds[2];
+#define MAX_FDS (sizeof(fds) / sizeof(struct pollfd))
 
 	snprintf(learn_dir, sizeof(learn_dir), "%s/Maildir/%s/cur", home, LEARN_DIR);
 	fds[0].events = POLLIN;
@@ -149,7 +150,7 @@ int main(int argc, char *argv[])
 	uint8_t event[sizeof(struct inotify_event) + NAME_MAX + 1];
 
 	while (1) {
-		int n = poll(fds, 2, timeout);
+		int n = poll(fds, MAX_FDS, timeout);
 
 		if (n == 0) {
 			handle_spam();
@@ -158,7 +159,7 @@ int main(int argc, char *argv[])
 		} else if (n > 0) {
 			int i;
 
-			for (i = 0; i < 2; ++i)
+			for (i = 0; i < MAX_FDS; ++i)
 				if (fds[i].revents)
 					read(fds[i].fd, event, sizeof(event));
 
