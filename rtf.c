@@ -38,12 +38,14 @@
 #define IGNOREDIR ".Ignore"
 
 static int run_bogo;
+static int run_drop;
 
 struct entry {
 	const char *str;
 	struct entry *next;
 };
 
+static struct entry *melist;
 static struct entry *whitelist;
 static struct entry *blacklist;
 static struct entry *ignorelist;
@@ -158,8 +160,12 @@ static int read_config(const char *fname)
 				head = &blacklist;
 			else if (strcmp(line, "[ignore]") == 0)
 				head = &ignorelist;
-			else
+			else if (strcmp(line, "[me]") == 0)
+				head = &melist;
+			else {
 				syslog(LOG_INFO, "Unexpected: %s\n", line);
+				head = NULL;
+			}
 		} else if (head)
 			add_entry(head, line);
 	}
@@ -210,6 +216,13 @@ static void ignore(const char *home)
 	safe_rename(path);
 }
 
+static void drop(const char *home)
+{
+	char path[PATH_SIZE];
+	snprintf(path, sizeof(path), "%s/Maildir/.Drop/cur/%s:2,S", home, tmp_file);
+	safe_rename(path);
+}
+
 static int list_filter(char *line, struct entry *head)
 {
 	struct entry *e;
@@ -257,6 +270,11 @@ static void filter(int fd, const char *home)
 			}
 		} else if (strncmp(buff, "Date:", 5) == 0)
 			saw_date = 1;
+		else if (strncmp(buff, "To:", 3) == 0) {
+			if (run_drop)
+				if (!list_filter(buff, melist))
+					drop(home);
+		}
 	}
 
 	fclose(fp);
@@ -287,7 +305,12 @@ int main(int argc, char *argv[])
 		return 0; /* continue */
 	}
 
-	run_bogo = argc > 1 && strcmp(argv[1], "-b") == 0;
+	int c;
+	while ((c = getopt(argc, argv, "bd")) != EOF)
+		switch (c) {
+		case 'b': run_bogo = 1; break;
+		case 'd': run_drop = 1; break;
+		}
 
 	snprintf(path, sizeof(path), "%s/.rtf", home);
 	read_config(path);
