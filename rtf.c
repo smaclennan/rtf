@@ -280,14 +280,19 @@ static void filter(int fd, const char *home)
 
 	fclose(fp);
 
-	if (run_drop && !is_me)
-		drop(home);
-
+	/* Quite a few of the ignored entries use global to
+	 * addressii. Rather than a huge me list, handle ignore before
+	 * drop.
+	 */
 	if (is_ignored) {
 		/* Tell bogofilter this is ham */
 		run_bogofilter(tmp_path, "-n");
 		ignore(home);
 	}
+
+	if (run_drop && !is_me)
+		drop(home);
+
 	if (is_ham == 1) {
 		/* Tell bogofilter this is ham */
 		run_bogofilter(tmp_path, "-n");
