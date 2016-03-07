@@ -236,7 +236,8 @@ static int list_filter(char *line, struct entry *head)
 
 static void filter(int fd, const char *home)
 {
-	int is_ham = 0, is_spam = 0, is_ignored = 0, saw_from = 0, saw_date = 0;
+	int is_ham = 0, is_spam = 0, is_ignored = 0, is_me = 0;
+	int saw_from = 0, saw_date = 0;
 
 	FILE *fp = fopen(tmp_path, "r");
 	if (!fp) {
@@ -268,16 +269,19 @@ static void filter(int fd, const char *home)
 				is_spam = 1; /* spam */
 				break;
 			}
+		} else if (strncmp(buff, "To:", 3) == 0 ||
+				   strncmp(buff, "Cc:", 3) == 0 ||
+				   strncmp(buff, "Bcc:", 4) == 0) {
+			if (list_filter(buff, melist))
+				is_me = 1;
 		} else if (strncmp(buff, "Date:", 5) == 0)
 			saw_date = 1;
-		else if (strncmp(buff, "To:", 3) == 0) {
-			if (run_drop)
-				if (!list_filter(buff, melist))
-					drop(home);
-		}
 	}
 
 	fclose(fp);
+
+	if (run_drop && !is_me)
+		drop(home);
 
 	if (is_ignored) {
 		/* Tell bogofilter this is ham */
