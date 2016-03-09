@@ -15,12 +15,32 @@
  * along with this program.  If not, see <http://www.gnu.org/licenses/>.
  */
 
-/* This is a Really Trivial Filter(tm) that allows for white lists,
- * black lists, and ignore lists.
+/* This is a Really Trivial Filter(tm) that allows for filtering email.
  *
- * If the email is missing the from or date fields it is considered spam.
+ * The filter lists:
  *
- * It also optionally runs the emails through bogofilter.
+ * whitelist - To or From that should be marked ham
+ * blacklist - From or Subject that should be marked spam
+ * me - list of my emails (see below)
+ * ignore - From that should be ignored
+ *
+ * Note: To includes To, Cc, and Bcc.
+ *
+ * Descisions:
+ *
+ * 1) Whitelist is highest priority (ham)
+ * 2) The ignore list is next (ignore)
+ * 3) Optionally check if not on the me list (drop)
+ * 4) Blacklist is next (spam)
+ * 5) Check if the from and/or date fields are missing (spam)
+ * 6) Optionally runs the emails through bogofilter (ham or spam)
+ *
+ * Actions:
+ *
+ * Ham moved to inbox and left as new.
+ * Spam moved to spam folder and marked as read.
+ * Ignore moved to ignore folder and marked as read.
+ * Drop moved to drop folder and marked as read.
  */
 
 #define _GNU_SOURCE /* for strcasestr */
@@ -156,8 +176,6 @@ static int read_config(const char *fname)
 				head = &whitelist;
 			else if (strcmp(line, "[blacklist]") == 0)
 				head = &blacklist;
-			else if (strcmp(line, "[filter]") == 0)
-				head = &blacklist;
 			else if (strcmp(line, "[ignore]") == 0)
 				head = &ignorelist;
 			else if (strcmp(line, "[me]") == 0)
@@ -249,55 +267,42 @@ static void filter(int fd, const char *home)
 	while (fgets(buff, sizeof(buff), fp)) {
 		if (*buff == '\n')
 			break; /* end of buff */
-		else if (strncmp(buff, "From:", 5) == 0) {
-			if (list_filter(buff, ignorelist)) {
-				is_ignored = 1;
-				break;
-			} else if (list_filter(buff, whitelist)) {
-				is_ham = 1;
-				break;
-			} else if (list_filter(buff, blacklist)) {
-				is_spam = 1; /* spam */
-				break;
-			}
-			saw_from = 1;
-		} else if (strncmp(buff, "Subject:", 8) == 0) {
-			if (list_filter(buff, whitelist)) {
-				is_ham = 1;
-				break;
-			} else if (list_filter(buff, blacklist)) {
-				is_spam = 1; /* spam */
-				break;
-			}
-		} else if (strncmp(buff, "To:", 3) == 0 ||
+		else if (strncmp(buff, "To:", 3) == 0 ||
 				   strncmp(buff, "Cc:", 3) == 0 ||
 				   strncmp(buff, "Bcc:", 4) == 0) {
+			if (list_filter(buff, whitelist))
+				is_ham = 1;
 			if (list_filter(buff, melist))
 				is_me = 1;
+		} else if (strncmp(buff, "From:", 5) == 0) {
+			saw_from = 1;
+			if (list_filter(buff, whitelist))
+				is_ham = 1;
+			if (list_filter(buff, ignorelist))
+				is_ignored = 1;
+			if (list_filter(buff, blacklist))
+				is_spam = 1;
+		} else if (strncmp(buff, "Subject:", 8) == 0) {
+			if (list_filter(buff, blacklist))
+				is_spam = 1;
 		} else if (strncmp(buff, "Date:", 5) == 0)
 			saw_date = 1;
 	}
 
 	fclose(fp);
 
-	/* Quite a few of the ignored entries use global to
-	 * addressii. Rather than a huge me list, handle ignore before
-	 * drop.
-	 */
-	if (is_ignored) {
-		/* Tell bogofilter this is ham */
-		run_bogofilter(tmp_path, "-n");
-		ignore(home);
-	}
-
-	if (run_drop && !is_me)
-		drop(home);
-
 	if (is_ham == 1) {
 		/* Tell bogofilter this is ham */
 		run_bogofilter(tmp_path, "-n");
 		ham(home);
 	}
+	if (is_ignored) {
+		/* Tell bogofilter this is ham */
+		run_bogofilter(tmp_path, "-n");
+		ignore(home);
+	}
+	if (run_drop && !is_me)
+		drop(home);
 	if (is_spam == 1 || saw_from == 0 || saw_date == 0) {
 		/* Tell bogofilter this is spam */
 		run_bogofilter(tmp_path, "-s");
