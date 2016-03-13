@@ -28,11 +28,11 @@
  *
  * Descisions:
  *
- * 1) Whitelist is highest priority (ham)
- * 2) The ignore list is next (ignore)
- * 3) Optionally check if not on the me list (drop)
- * 4) Blacklist is next (spam)
- * 5) Check if the from and/or date fields are missing (spam)
+ * 1) Whitelist (ham)
+ * 2) The ignore list (ignore)
+ * 3) Blacklist (spam)
+ * 4) Check if the from and/or date fields are missing (spam)
+ * 5) Optionally check if not on the me list (spam)
  * 6) Optionally runs the emails through bogofilter (ham or spam)
  *
  * Actions:
@@ -40,7 +40,6 @@
  * Ham moved to inbox and left as new.
  * Spam moved to spam folder and marked as read.
  * Ignore moved to ignore folder and marked as read.
- * Drop moved to drop folder and marked as read.
  */
 
 #define _GNU_SOURCE /* for strcasestr */
@@ -234,13 +233,6 @@ static void ignore(const char *home)
 	safe_rename(path);
 }
 
-static void drop(const char *home)
-{
-	char path[PATH_SIZE];
-	snprintf(path, sizeof(path), "%s/Maildir/.Drop/cur/%s:2,S", home, tmp_file);
-	safe_rename(path);
-}
-
 static int list_filter(char *line, struct entry *head)
 {
 	struct entry *e;
@@ -291,7 +283,7 @@ static void filter(int fd, const char *home)
 
 	fclose(fp);
 
-	if (is_ham == 1) {
+	if (is_ham) {
 		/* Tell bogofilter this is ham */
 		run_bogofilter(tmp_path, "-n");
 		ham(home);
@@ -301,9 +293,12 @@ static void filter(int fd, const char *home)
 		run_bogofilter(tmp_path, "-n");
 		ignore(home);
 	}
-	if (run_drop && !is_me)
-		drop(home);
 	if (is_spam == 1 || saw_from == 0 || saw_date == 0) {
+		/* Tell bogofilter this is spam */
+		run_bogofilter(tmp_path, "-s");
+		spam(home);
+	}
+	if (run_drop && !is_me) {
 		/* Tell bogofilter this is spam */
 		run_bogofilter(tmp_path, "-s");
 		spam(home);
