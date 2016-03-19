@@ -58,6 +58,16 @@
 
 static int run_bogo;
 static int run_drop;
+static const char *logfile;
+
+static unsigned flags;
+#define IS_HAM			0x01
+#define IS_IGNORED		0x02
+#define IS_SPAM			0x04
+#define IS_ME			0x08
+#define SAW_DATE		0x10
+#define SAW_FROM		0x20
+#define BOGO_SPAM		0x40
 
 struct entry {
 	const char *str;
@@ -132,6 +142,30 @@ write_error:
 	close(fd);
 	unlink(tmp_file);
 	return -1;
+}
+
+/* Called at exit() */
+static void logit(void)
+{
+	if (!logfile)
+		return;
+
+	FILE *fp = fopen(logfile, "a");
+	if (!fp) {
+		syslog(LOG_ERR, "%s: %m", logfile);
+		return;
+	}
+
+#define OUT(a, c) ((flags & (a)) ? (c) : '-')
+	fprintf(fp, "[%ld] %s %c%c%c%c%c%c%c\n", time(NULL), tmp_file,
+			OUT(IS_ME, 'M'), OUT(SAW_FROM, 'F'), OUT(SAW_DATE, 'D'),
+			OUT(IS_HAM, 'H'), OUT(IS_IGNORED, 'I'), OUT(IS_SPAM, 'S'),
+			OUT(BOGO_SPAM, 'B'));
+
+	if (ferror(fp))
+		syslog(LOG_ERR, "%s: write error", logfile);
+
+	fclose(fp);
 }
 
 static void add_entry(struct entry **head, const char *str)
@@ -246,9 +280,6 @@ static int list_filter(char *line, struct entry *head)
 
 static void filter(int fd, const char *home)
 {
-	int is_ham = 0, is_spam = 0, is_ignored = 0, is_me = 0;
-	int saw_from = 0, saw_date = 0;
-
 	FILE *fp = fopen(tmp_path, "r");
 	if (!fp) {
 		syslog(LOG_WARNING, "%s: %m", tmp_path);
@@ -263,42 +294,42 @@ static void filter(int fd, const char *home)
 				   strncmp(buff, "Cc:", 3) == 0 ||
 				   strncmp(buff, "Bcc:", 4) == 0) {
 			if (list_filter(buff, whitelist))
-				is_ham = 1;
+				flags |= IS_HAM;
 			if (list_filter(buff, melist))
-				is_me = 1;
+				flags |= IS_ME;
 		} else if (strncmp(buff, "From:", 5) == 0) {
-			saw_from = 1;
+			flags |= SAW_FROM;
 			if (list_filter(buff, whitelist))
-				is_ham = 1;
+				flags |= IS_HAM;
 			if (list_filter(buff, ignorelist))
-				is_ignored = 1;
+				flags |= IS_IGNORED;
 			if (list_filter(buff, blacklist))
-				is_spam = 1;
+				flags |= IS_SPAM;
 		} else if (strncmp(buff, "Subject:", 8) == 0) {
 			if (list_filter(buff, blacklist))
-				is_spam = 1;
+				flags |= IS_SPAM;
 		} else if (strncmp(buff, "Date:", 5) == 0)
-			saw_date = 1;
+			flags |= SAW_DATE;
 	}
 
 	fclose(fp);
 
-	if (is_ham) {
+	if (flags & IS_HAM) {
 		/* Tell bogofilter this is ham */
 		run_bogofilter(tmp_path, "-n");
 		ham(home);
 	}
-	if (is_ignored) {
+	if (flags & IS_IGNORED) {
 		/* Tell bogofilter this is ham */
 		run_bogofilter(tmp_path, "-n");
 		ignore(home);
 	}
-	if (is_spam == 1 || saw_from == 0 || saw_date == 0) {
+	if ((flags & IS_SPAM) || (flags & (SAW_FROM | SAW_DATE)) == 0) {
 		/* Tell bogofilter this is spam */
 		run_bogofilter(tmp_path, "-s");
 		spam(home);
 	}
-	if (run_drop && !is_me) {
+	if (run_drop && (flags & IS_ME) == 0) {
 		/* Tell bogofilter this is spam */
 		run_bogofilter(tmp_path, "-s");
 		spam(home);
@@ -315,10 +346,11 @@ int main(int argc, char *argv[])
 	}
 
 	int c;
-	while ((c = getopt(argc, argv, "bd")) != EOF)
+	while ((c = getopt(argc, argv, "bdl:")) != EOF)
 		switch (c) {
 		case 'b': run_bogo = 1; break;
 		case 'd': run_drop = 1; break;
+		case 'l': logfile = optarg; break;
 		}
 
 	snprintf(path, sizeof(path), "%s/.rtf", home);
@@ -328,10 +360,15 @@ int main(int argc, char *argv[])
 	if (fd < 0)
 		return 0; /* continue */
 
+	if (logfile)
+		atexit(logit);
+
 	filter(fd, home);
 
-	if (run_bogofilter(tmp_path, "-u") == 0)
+	if (run_bogofilter(tmp_path, "-u") == 0) {
+		flags |= BOGO_SPAM;
 		spam(home);
+	}
 
 	ham(home);
 	return 0; /* unreached */
