@@ -59,6 +59,7 @@
 static int run_bogo;
 static int run_drop;
 static const char *logfile;
+static char *subject = "NONE";
 
 static unsigned flags;
 #define IS_HAM			0x01
@@ -155,12 +156,16 @@ static void logit(void)
 		syslog(LOG_ERR, "%s: %m", logfile);
 		return;
 	}
+	
+	char *p = subject;
+	if (strncmp(subject, "Subject: ", 9) == 0)
+		p += 9;
 
 #define OUT(a, c) ((flags & (a)) ? (c) : '-')
-	fprintf(fp, "%s %c%c%c%c%c%c%c\n", tmp_file,
+	fprintf(fp, "%s %c%c%c%c%c%c%c %.40s\n", tmp_file,
 			OUT(IS_ME, 'M'), OUT(SAW_FROM, 'F'), OUT(SAW_DATE, 'D'),
 			OUT(IS_HAM, 'H'), OUT(IS_IGNORED, 'I'), OUT(IS_SPAM, 'S'),
-			OUT(BOGO_SPAM, 'B'));
+			OUT(BOGO_SPAM, 'B'), p);
 
 	if (ferror(fp))
 		syslog(LOG_ERR, "%s: write error", logfile);
@@ -306,6 +311,10 @@ static void filter(int fd, const char *home)
 			if (list_filter(buff, blacklist))
 				flags |= IS_SPAM;
 		} else if (strncmp(buff, "Subject:", 8) == 0) {
+			if ((subject = strdup(buff)))
+				strtok(subject, "\r\n");
+			else
+				subject = "NOMEM";
 			if (list_filter(buff, blacklist))
 				flags |= IS_SPAM;
 		} else if (strncmp(buff, "Date:", 5) == 0)
