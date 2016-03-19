@@ -157,7 +157,7 @@ static void logit(void)
 	}
 
 #define OUT(a, c) ((flags & (a)) ? (c) : '-')
-	fprintf(fp, "[%ld] %s %c%c%c%c%c%c%c\n", time(NULL), tmp_file,
+	fprintf(fp, "%s %c%c%c%c%c%c%c\n", tmp_file,
 			OUT(IS_ME, 'M'), OUT(SAW_FROM, 'F'), OUT(SAW_DATE, 'D'),
 			OUT(IS_HAM, 'H'), OUT(IS_IGNORED, 'I'), OUT(IS_SPAM, 'S'),
 			OUT(BOGO_SPAM, 'B'));
