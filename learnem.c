@@ -128,15 +128,15 @@ int main(int argc, char *argv[])
 
 	snprintf(config_dir, sizeof(config_dir), "%s/.bogofilter", home);
 	snprintf(spam_dir, sizeof(spam_dir), "%s/Maildir/%s/cur", home, SPAM_DIR);
+	snprintf(learn_dir, sizeof(learn_dir), "%s/Maildir/%s/cur", home, LEARN_DIR);
+	snprintf(ham_dir, sizeof(ham_dir), "%s/Maildir/%s/cur", home, HAM_DIR);
 
 	struct pollfd fds[2];
 #define MAX_FDS (sizeof(fds) / sizeof(struct pollfd))
 
-	snprintf(learn_dir, sizeof(learn_dir), "%s/Maildir/%s/cur", home, LEARN_DIR);
 	fds[0].events = POLLIN;
 	fds[0].fd = setup_inotify(learn_dir);
 
-	snprintf(ham_dir, sizeof(ham_dir), "%s/Maildir/%s/cur", home, HAM_DIR);
 	fds[1].events = POLLIN;
 	fds[1].fd = setup_inotify(ham_dir);
 

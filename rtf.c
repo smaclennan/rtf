@@ -162,7 +162,7 @@ static void logit(void)
 		p += 9;
 
 #define OUT(a, c) ((flags & (a)) ? (c) : '-')
-	fprintf(fp, "%s %c%c%c%c%c%c%c %.40s\n", tmp_file,
+	fprintf(fp, "%-20s %c%c%c%c%c%c%c %.42s\n", tmp_file,
 			OUT(IS_ME, 'M'), OUT(SAW_FROM, 'F'), OUT(SAW_DATE, 'D'),
 			OUT(IS_HAM, 'H'), OUT(IS_IGNORED, 'I'), OUT(IS_SPAM, 'S'),
 			OUT(BOGO_SPAM, 'B'), p);
@@ -323,6 +323,10 @@ static void filter(int fd, const char *home)
 
 	fclose(fp);
 
+	/* Just check the mail... do not update the word lists */
+	if (run_bogofilter(tmp_path, "") == 0)
+		flags |= BOGO_SPAM;
+
 	if (flags & IS_HAM) {
 		/* Tell bogofilter this is ham */
 		run_bogofilter(tmp_path, "-n");
@@ -333,16 +337,16 @@ static void filter(int fd, const char *home)
 		run_bogofilter(tmp_path, "-n");
 		ignore(home);
 	}
-	if ((flags & IS_SPAM) || (flags & (SAW_FROM | SAW_DATE)) == 0) {
+	if ((flags & (IS_SPAM | BOGO_SPAM)) ||
+		(flags & SAW_FROM) == 0 || (flags & SAW_DATE) == 0 ||
+		(run_drop && (flags & IS_ME) == 0)) {
 		/* Tell bogofilter this is spam */
 		run_bogofilter(tmp_path, "-s");
 		spam(home);
 	}
-	if (run_drop && (flags & IS_ME) == 0) {
-		/* Tell bogofilter this is spam */
-		run_bogofilter(tmp_path, "-s");
-		spam(home);
-	}
+
+	run_bogofilter(tmp_path, "-n");
+	ham(home);
 }
 
 int main(int argc, char *argv[])
@@ -373,12 +377,5 @@ int main(int argc, char *argv[])
 		atexit(logit);
 
 	filter(fd, home);
-
-	if (run_bogofilter(tmp_path, "-u") == 0) {
-		flags |= BOGO_SPAM;
-		spam(home);
-	}
-
-	ham(home);
 	return 0; /* unreached */
 }
