@@ -297,6 +297,7 @@ static void filter(int fd, const char *home)
 			break; /* end of buff */
 		else if (strncmp(buff, "To:", 3) == 0 ||
 				   strncmp(buff, "Cc:", 3) == 0 ||
+				   strncmp(buff, "CC:", 3) == 0 ||
 				   strncmp(buff, "Bcc:", 4) == 0) {
 			if (list_filter(buff, whitelist))
 				flags |= IS_HAM;
