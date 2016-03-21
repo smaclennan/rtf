@@ -32,6 +32,7 @@
  * 2) The ignore list (ignore)
  * 3) Blacklist (spam)
  * 4) Check if the from and/or date fields are missing (spam)
+ * 5) Check if from me (spam)
  * 5) Optionally check if not on the me list (spam)
  * 6) Optionally runs the emails through bogofilter (ham or spam)
  *
@@ -40,6 +41,12 @@
  * Ham moved to inbox and left as new.
  * Spam moved to spam folder and marked as read.
  * Ignore moved to ignore folder and marked as read.
+ *
+ * The from me (rule 5) is probably non-intuitive. I have my last name
+ * white listed. All emails legitimately from me are of the form
+ * <first name> <lastname> <email>. Spams are always just <email>. So
+ * the whitelist catches the legitimate emails and the "from me"
+ * catches the spams.
  */
 
 #define _GNU_SOURCE /* for strcasestr */
@@ -67,9 +74,10 @@ static unsigned flags;
 #define IS_IGNORED		0x02
 #define IS_SPAM			0x04
 #define IS_ME			0x08
-#define SAW_DATE		0x10
-#define SAW_FROM		0x20
-#define BOGO_SPAM		0x40
+#define FROM_ME			0x10
+#define SAW_DATE		0x20
+#define SAW_FROM		0x40
+#define BOGO_SPAM		0x80
 
 struct entry {
 	const char *str;
@@ -169,10 +177,10 @@ static void logit(void)
 
 #define OUT(a, c) ((flags & (a)) ? (c) : '-')
 	/* Last two flags are for learnem */
-	fprintf(fp, "%-20s %c%c%c%c%c%c%c-- %.42s\n", tmp_file,
+	fprintf(fp, "%-20s %c%c%c%c%c%c%c%c-- %.42s\n", tmp_file,
 			OUT(IS_ME, 'M'), OUT(SAW_FROM, 'F'), OUT(SAW_DATE, 'D'),
 			OUT(IS_HAM, 'H'), OUT(IS_IGNORED, 'I'), OUT(IS_SPAM, 'S'),
-			OUT(BOGO_SPAM, 'B'), p);
+			OUT(FROM_ME, 'f'), OUT(BOGO_SPAM, 'B'), p);
 
 	if (ferror(fp))
 		syslog(LOG_ERR, "%s: write error", logfile);
@@ -318,6 +326,8 @@ static void filter(int fd, const char *home)
 				flags |= IS_IGNORED;
 			if (list_filter(buff, blacklist))
 				flags |= IS_SPAM;
+			if (list_filter(buff, melist))
+				flags |= FROM_ME;
 		} else if (strncmp(buff, "Subject:", 8) == 0) {
 			if ((subject = strdup(buff)))
 				strtok(subject, "\r\n");
@@ -347,6 +357,7 @@ static void filter(int fd, const char *home)
 	}
 	if ((flags & (IS_SPAM | BOGO_SPAM)) ||
 		(flags & SAW_FROM) == 0 || (flags & SAW_DATE) == 0 ||
+		(flags & FROM_ME) ||
 		(run_drop && (flags & IS_ME) == 0)) {
 		/* Tell bogofilter this is spam */
 		run_bogofilter(tmp_path, "-s");

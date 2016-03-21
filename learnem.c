@@ -56,7 +56,7 @@ static void logit(const char *tmp_file, int is_spam)
 	if ((p = strchr(tmp, ':'))) *p = 0;
 
 	/* Last two flags are for learnem */
-	fprintf(fp, "%-20s -------L%c\n", tmp, is_spam ? 'S' : 'H');
+	fprintf(fp, "%-20s --------L%c\n", tmp, is_spam ? 'S' : 'H');
 
 	if (ferror(fp))
 		syslog(LOG_ERR, "%s: write error", logfile);
