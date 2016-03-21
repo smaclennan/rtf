@@ -10,6 +10,7 @@
 #include <dirent.h>
 #include <syslog.h>
 #include <sys/inotify.h>
+#include <sys/file.h>
 
 #define LEARN_DIR ".LearnSPAM"
 #define HAM_DIR ".Ham"
@@ -30,6 +31,38 @@ static char learn_dir[MY_PATH_MAX];
 static char ham_dir[MY_PATH_MAX];
 static char spam_dir[MY_PATH_MAX];
 static char config_dir[MY_PATH_MAX];
+static char *logfile;
+
+static void logit(const char *tmp_file, int is_spam)
+{
+	if (!logfile)
+		return;
+
+	FILE *fp = fopen(logfile, "a");
+	if (!fp) {
+		syslog(LOG_ERR, "%s: %m", logfile);
+		return;
+	}
+
+	if (flock(fileno(fp), LOCK_EX)) {
+		syslog(LOG_ERR, "%s: flock: %m", logfile);
+		fclose(fp);
+		return;
+	}
+	
+	/* Remove special chars from tmp_file to match rtf */
+	char tmp[24], *p;
+	snprintf(tmp, sizeof(tmp), "%s", tmp_file);
+	if ((p = strchr(tmp, ':'))) *p = 0;
+
+	/* Last two flags are for learnem */
+	fprintf(fp, "%-20s -------L%c\n", tmp, is_spam ? 'S' : 'H');
+
+	if (ferror(fp))
+		syslog(LOG_ERR, "%s: write error", logfile);
+
+	fclose(fp);
+}
 
 static void handle_spam(void)
 {
@@ -62,6 +95,8 @@ static void handle_spam(void)
 			strcat(new, ",S");
 		if (rename(old, new))
 			syslog(LOG_ERR, "rename(%s, %s) failed", old, new);
+		else
+			logit(ent->d_name, 1);
 	}
 
 	closedir(dir);
@@ -92,6 +127,8 @@ static void handle_ham(void)
 		/* Just remove it */
 		if (unlink(old))
 			syslog(LOG_ERR, "unlink %s: %s", old, strerror(errno));
+		else
+			logit(ent->d_name, 0);
 	}
 
 	closedir(dir);
@@ -125,6 +162,11 @@ int main(int argc, char *argv[])
 		syslog(LOG_ERR, "You are homeless.");
 		exit(1);
 	}
+
+	int c;
+	while ((c = getopt(argc, argv, "l:")) != EOF)
+		if (c == 'l')
+			logfile = optarg;
 
 	snprintf(config_dir, sizeof(config_dir), "%s/.bogofilter", home);
 	snprintf(spam_dir, sizeof(spam_dir), "%s/Maildir/%s/cur", home, SPAM_DIR);

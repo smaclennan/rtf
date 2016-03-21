@@ -52,6 +52,7 @@
 #include <syslog.h>
 #include <errno.h>
 #include <time.h>
+#include <sys/file.h>
 
 #define BOGOFILTER "bogofilter"
 #define IGNOREDIR ".Ignore"
@@ -156,13 +157,19 @@ static void logit(void)
 		syslog(LOG_ERR, "%s: %m", logfile);
 		return;
 	}
-	
+
+	if (flock(fileno(fp), LOCK_EX)) {
+		syslog(LOG_ERR, "%s: flock: %m", logfile);
+		/* keep going even if we don't get the lock */
+	}
+
 	char *p = subject;
 	if (strncmp(subject, "Subject: ", 9) == 0)
 		p += 9;
 
 #define OUT(a, c) ((flags & (a)) ? (c) : '-')
-	fprintf(fp, "%-20s %c%c%c%c%c%c%c %.42s\n", tmp_file,
+	/* Last two flags are for learnem */
+	fprintf(fp, "%-20s %c%c%c%c%c%c%c-- %.42s\n", tmp_file,
 			OUT(IS_ME, 'M'), OUT(SAW_FROM, 'F'), OUT(SAW_DATE, 'D'),
 			OUT(IS_HAM, 'H'), OUT(IS_IGNORED, 'I'), OUT(IS_SPAM, 'S'),
 			OUT(BOGO_SPAM, 'B'), p);
