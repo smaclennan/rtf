@@ -1,6 +1,6 @@
 CFLAGS += -Wall -O2
 
-all: rtf learnem
+all: rtf learnem rtfsort
 
 clean:
-	rm -f rtf learnem
+	rm -f rtf learnem rtfsort
