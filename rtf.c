@@ -28,8 +28,8 @@
  *
  * Descisions:
  *
- * 1) Whitelist (ham)
- * 2) The ignore list (ignore)
+ * 1) The ignore list (ignore)
+ * 2) Whitelist (ham)
  * 3) Blacklist (spam)
  * 4) Check if the from and/or date fields are missing (spam)
  * 5) Check if from me (spam)
@@ -345,15 +345,15 @@ static void filter(int fd, const char *home)
 	if (run_bogofilter(tmp_path, "") == 0)
 		flags |= BOGO_SPAM;
 
-	if (flags & IS_HAM) {
-		/* Tell bogofilter this is ham */
-		run_bogofilter(tmp_path, "-n");
-		ham(home);
-	}
 	if (flags & IS_IGNORED) {
 		/* Tell bogofilter this is ham */
 		run_bogofilter(tmp_path, "-n");
 		ignore(home);
+	}
+	if (flags & IS_HAM) {
+		/* Tell bogofilter this is ham */
+		run_bogofilter(tmp_path, "-n");
+		ham(home);
 	}
 	if ((flags & (IS_SPAM | BOGO_SPAM)) ||
 		(flags & SAW_FROM) == 0 || (flags & SAW_DATE) == 0 ||
