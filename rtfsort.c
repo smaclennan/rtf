@@ -160,12 +160,12 @@ static int date_in_range(char *fname)
 
 int main(int argc, char *argv[])
 {
-	char line[80], fname[80], subject[80];
+	char line[80], fname[80], *subject;
 	char is_me, saw_from, saw_date, is_ham, is_ignore, is_spam, bogo_spam;
 	char from_me, learn, learn_flag;
 	unsigned total = 0, not_me = 0, from = 0, ignored = 0, real = 0, spam = 0;
 	unsigned learned = 0;
-	int c;
+	int c, n;
 
 	while ((c = getopt(argc, argv, "d:v")) != EOF)
 		switch (c) {
@@ -178,48 +178,48 @@ int main(int argc, char *argv[])
 		}
 
 	while (fgets(line, sizeof(line), stdin))
-		if (sscanf(line, "%s %c%c%c%c%c%c%c%c%c%c %[^\n]",
+		if (sscanf(line, "%s %c%c%c%c%c%c%c%c%c%c%n",
 				   fname, &is_me, &saw_from, &saw_date, &is_ham,
 				   &is_ignore, &is_spam, &from_me, &bogo_spam,
 				   &learn, &learn_flag,
-				   subject) == 12) {
+				   &n) == 11) {
 			if (!date_in_range(fname)) continue;
+			++total;
 			if (verbose)
 				fputs(line, stderr);
+
 			if (learn == 'L') {
 				++learned;
-				if (learn_flag == 'S')
-					if (check_list(fname))
+				if (learn_flag == 'S') {
+					if (check_list(fname)) {
 						--real;
-			}
-			++total;
-			if (is_me == '-' && is_ignore == '-' && is_ham == '-')
-				++not_me;
-			else if ((is_me == 'M' || is_ham == 'H') && is_ignore == '-') {
-				if (bogo_spam == '-' && from_me == '-') {
+						++spam;
+					} else
+						printf("Problems %s\n", fname);
+				} else if (learn_flag == 'H') {
+					--spam;
 					++real;
-					add_list(fname, subject);
-					// puts(subject);
 				} else
-					++spam;
+						printf("Problems learn flags %c\n", learn_flag);
+				continue;
 			}
+
+			subject = line + n;
+			if (*subject == ' ') ++subject;
+
 			if (is_ignore == 'I')
 				++ignored;
-			if (from_me == 'f') {
+			else if (is_ham == 'H')
+				++real;
+			else if (is_me == '-')
+				++not_me;
+			else if (bogo_spam == '-' && from_me == '-') {
+				++real;
+				add_list(fname, subject);
+			} else
+				++spam;
+			if (from_me == 'f')
 				++from;
-				// puts(subject);
-			}
-		} else if (sscanf(line, "%s %c%c%c%c%c%c%c%c%c%c",
-						  fname, &is_me, &saw_from, &saw_date, &is_ham,
-						  &is_ignore, &is_spam, &bogo_spam,
-						  &from_me, &learn, &learn_flag) == 11) {
-			if (!date_in_range(fname)) continue;
-			if (verbose)
-				fputs(line, stderr);
-			++learned;
-			if (learn_flag == 'S')
-				if (check_list(fname))
-					--real;
 		} else
 			printf("PROBS: %s", line);
 
