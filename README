@@ -6,11 +6,11 @@ Ignore.
 
 My .qmail file is two lines and looks like this:
 
-|/home/seanm/bin/rtf -b
+|/home/seanm/bin/rtf -bd -l /home/seanm/.bogofilter/rtf.log
 ./Maildir/
 
 The ./Maildir/ is just to handle error conditions. If there are no
-errors, rtf returns 99.
+errors, rtf returns 99 and the Maildir rule is skipped.
 
 Spam is moved to the Spam directory and marked as read.
 
