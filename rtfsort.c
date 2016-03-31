@@ -209,9 +209,10 @@ int main(int argc, char *argv[])
 
 			if (is_ignore == 'I')
 				++ignored;
-			else if (is_ham == 'H')
+			else if (is_ham == 'H') {
 				++real;
-			else if (is_me == '-')
+				add_list(fname, subject);
+			} else if (is_me == '-')
 				++not_me;
 			else if (bogo_spam == '-' && from_me == '-') {
 				++real;
