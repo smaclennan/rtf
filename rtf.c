@@ -60,6 +60,7 @@
 #include <errno.h>
 #include <time.h>
 #include <sys/file.h>
+#include <sys/wait.h>
 
 #define BOGOFILTER "bogofilter"
 #define IGNOREDIR ".Ignore"

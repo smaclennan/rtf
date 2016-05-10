@@ -9,8 +9,12 @@
 #include <poll.h>
 #include <dirent.h>
 #include <syslog.h>
-#include <sys/inotify.h>
 #include <sys/file.h>
+#ifdef __linux__
+#include <sys/inotify.h>
+#else
+#include <sys/event.h>
+#endif
 
 #define LEARN_DIR ".LearnSPAM"
 #define HAM_DIR ".Ham"
@@ -18,8 +22,20 @@
 
 #define INOTIFY_MASK IN_MOVED_TO
 
+#ifdef __linux__
 #define QUEUE_TIMEOUT 10000 /* in ms */
 #define HOURLY_TIMEOUT (60 * 60 * 1000)
+
+#define TIMEOUT int
+#else
+static struct timespec queue_timeout  = { .tv_sec = 10 };
+static struct timespec hourly_timeout = { .tv_sec = 60 * 60 * 1000 };
+
+#define QUEUE_TIMEOUT  &queue_timeout
+#define HOURLY_TIMEOUT &hourly_timeout
+
+#define TIMEOUT struct timespec *
+#endif
 
 /* Paths are /home/<user>/Maildir/<folder>/cur/<fname>
  * user is max 64, folder lets say 16, fname about 48. This gives
@@ -87,12 +103,12 @@ static void handle_spam(void)
 		}
 
 		/* Move to spam and mark read */
-		snprintf(new, sizeof(new) - 3, "%s/%s", spam_dir, ent->d_name);
+		int n = snprintf(new, sizeof(new) - 3, "%s/%s", spam_dir, ent->d_name);
 		if ((p = strchr(new, ','))) {
 			if (!strchr(p, 'S'))
-				strcat(new, "S");
+				snprintf(new + n, sizeof(new) - n, "S");
 		} else
-			strcat(new, ",S");
+			snprintf(new + n, sizeof(new) - n, ",S");
 		if (rename(old, new))
 			syslog(LOG_ERR, "rename(%s, %s) failed", old, new);
 		else
@@ -134,6 +150,7 @@ static void handle_ham(void)
 	closedir(dir);
 }
 
+#ifdef __linux__
 static int setup_inotify(const char *dir)
 {
 	int fd = inotify_init();
@@ -154,6 +171,18 @@ static int setup_inotify(const char *dir)
 
 	return fd;
 }
+#else
+static void setup_kevent(int kq, struct kevent *event, const char *dir)
+{
+	int fd = open(dir, O_RDONLY);
+	if (fd < 0) {
+		perror(dir);
+		exit(1);
+	}
+
+	EV_SET(event, fd, EVFILT_VNODE, EV_ADD | EV_CLEAR, NOTE_WRITE, 0, NULL);
+}
+#endif
 
 int main(int argc, char *argv[])
 {
@@ -173,8 +202,9 @@ int main(int argc, char *argv[])
 	snprintf(learn_dir, sizeof(learn_dir), "%s/Maildir/%s/cur", home, LEARN_DIR);
 	snprintf(ham_dir, sizeof(ham_dir), "%s/Maildir/%s/cur", home, HAM_DIR);
 
-	struct pollfd fds[2];
-#define MAX_FDS (sizeof(fds) / sizeof(struct pollfd))
+#ifdef __linux__
+#define MAX_FDS 2
+	struct pollfd fds[MAX_FDS];
 
 	fds[0].events = POLLIN;
 	fds[0].fd = setup_inotify(learn_dir);
@@ -182,29 +212,46 @@ int main(int argc, char *argv[])
 	fds[1].events = POLLIN;
 	fds[1].fd = setup_inotify(ham_dir);
 
+	uint8_t event[sizeof(struct inotify_event) + NAME_MAX + 1];
+#else
+	int kq = kqueue();
+	if (kq < 0) {
+		perror("kqueue");
+		exit(1);
+	}
+
+	struct kevent events[2];
+	setup_kevent(kq, &events[0], learn_dir);
+	setup_kevent(kq, &events[1], ham_dir);
+#endif
+
 	/* Run through the directories once */
 	handle_spam();
 	handle_ham();
 
 	/* Trivial queuing. Since I tend to handle spam in chunks... hold
 	 * off and handle multiple messages at once. */
-	int timeout = HOURLY_TIMEOUT;
-	uint8_t event[sizeof(struct inotify_event) + NAME_MAX + 1];
+	TIMEOUT timeout = HOURLY_TIMEOUT;
 
 	while (1) {
+#ifdef __linux__
 		int n = poll(fds, MAX_FDS, timeout);
+#else
+		int n = kevent(kq, events, 2, NULL, 1, timeout);
+#endif
 
 		if (n == 0) {
 			handle_spam();
 			handle_ham();
 			timeout = HOURLY_TIMEOUT;
 		} else if (n > 0) {
+#ifdef __linux__
 			int i;
 
 			for (i = 0; i < MAX_FDS; ++i)
 				if (fds[i].revents)
 					read(fds[i].fd, event, sizeof(event));
-
+#endif
 			timeout = QUEUE_TIMEOUT;
 		}
 	}
