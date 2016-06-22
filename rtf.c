@@ -375,12 +375,6 @@ static void filter(int fd)
 
 int main(int argc, char *argv[])
 {
-	home = getenv("HOME");
-	if (!home) {
-		syslog(LOG_WARNING, "You are homeless!");
-		return 0; /* continue */
-	}
-
 	int c;
 	while ((c = getopt(argc, argv, "bdl:")) != EOF)
 		switch (c) {
@@ -388,6 +382,12 @@ int main(int argc, char *argv[])
 		case 'd': run_drop = 1; break;
 		case 'l': logfile = optarg; break;
 		}
+
+	home = getenv("HOME");
+	if (!home) {
+		syslog(LOG_WARNING, "You are homeless!");
+		return 0; /* continue */
+	}
 
 	read_config();
 
