@@ -68,6 +68,7 @@
 static int run_bogo;
 static int run_drop;
 static const char *logfile;
+static const char *home;
 static char *subject = "NONE";
 
 static unsigned flags;
@@ -100,7 +101,7 @@ static char buff[8096];
 static char tmp_file[84], tmp_path[PATH_SIZE];
 
 /* Not NFS safe and I don't care. */
-static int create_tmp_file(const char *home)
+static int create_tmp_file(void)
 {
 	char hostname[64];
 	if (gethostname(hostname, sizeof(hostname))) {
@@ -207,9 +208,12 @@ oom:
 	syslog(LOG_WARNING, "Out of memory.");
 }
 
-static int read_config(const char *fname)
+static int read_config(void)
 {
+	char fname[PATH_SIZE];
 	struct entry **head = NULL;
+
+	snprintf(fname, sizeof(fname), "%s/.rtf", home);
 
 	FILE *fp = fopen(fname, "r");
 	if (!fp) {
@@ -267,21 +271,21 @@ static void safe_rename(const char *path)
 	exit(99); /* don't continue - we handled it */
 }
 
-static void ham(const char *home)
+static void ham(void)
 {
 	char path[PATH_SIZE];
 	snprintf(path, sizeof(path), "%s/Maildir/new/%s", home, tmp_file);
 	safe_rename(path);
 }
 
-static void spam(const char *home)
+static void spam(void)
 {
 	char path[PATH_SIZE];
 	snprintf(path, sizeof(path), "%s/Maildir/.Spam/cur/%s:2,S", home, tmp_file);
 	safe_rename(path);
 }
 
-static void ignore(const char *home)
+static void ignore(void)
 {   /* Move to ignore and mark as read */
 	char path[PATH_SIZE];
 	snprintf(path, sizeof(path), "%s/Maildir/%s/cur/%s:2,S", home, IGNOREDIR, tmp_file);
@@ -299,7 +303,7 @@ static int list_filter(char *line, struct entry *head)
 	return 0;
 }
 
-static void filter(int fd, const char *home)
+static void filter(int fd)
 {
 	FILE *fp = fopen(tmp_path, "r");
 	if (!fp) {
@@ -349,12 +353,12 @@ static void filter(int fd, const char *home)
 	if (flags & IS_IGNORED) {
 		/* Tell bogofilter this is ham */
 		run_bogofilter(tmp_path, "-n");
-		ignore(home);
+		ignore();
 	}
 	if (flags & IS_HAM) {
 		/* Tell bogofilter this is ham */
 		run_bogofilter(tmp_path, "-n");
-		ham(home);
+		ham();
 	}
 	if ((flags & (IS_SPAM | BOGO_SPAM)) ||
 		(flags & SAW_FROM) == 0 || (flags & SAW_DATE) == 0 ||
@@ -362,17 +366,16 @@ static void filter(int fd, const char *home)
 		(run_drop && (flags & IS_ME) == 0)) {
 		/* Tell bogofilter this is spam */
 		run_bogofilter(tmp_path, "-s");
-		spam(home);
+		spam();
 	}
 
 	run_bogofilter(tmp_path, "-n");
-	ham(home);
+	ham();
 }
 
 int main(int argc, char *argv[])
 {
-	char path[PATH_SIZE];
-	const char *home = getenv("HOME");
+	home = getenv("HOME");
 	if (!home) {
 		syslog(LOG_WARNING, "You are homeless!");
 		return 0; /* continue */
@@ -386,16 +389,15 @@ int main(int argc, char *argv[])
 		case 'l': logfile = optarg; break;
 		}
 
-	snprintf(path, sizeof(path), "%s/.rtf", home);
-	read_config(path);
+	read_config();
 
-	int fd = create_tmp_file(home);
+	int fd = create_tmp_file();
 	if (fd < 0)
 		return 0; /* continue */
 
 	if (logfile)
 		atexit(logit);
 
-	filter(fd, home);
+	filter(fd);
 	return 0; /* unreached */
 }
