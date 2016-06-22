@@ -260,7 +260,7 @@ static int run_bogofilter(const char *fname, char *flags)
 		return 1; /* mark as non-spam */
 }
 
-static void safe_rename(const char *path)
+static void _safe_rename(const char *path)
 {
 	if (rename(tmp_path, path)) {
 		syslog(LOG_WARNING, "%s: %m", path);
@@ -275,22 +275,19 @@ static void ham(void)
 {
 	char path[PATH_SIZE];
 	snprintf(path, sizeof(path), "%s/Maildir/new/%s", home, tmp_file);
-	safe_rename(path);
+	_safe_rename(path);
 }
 
-static void spam(void)
+static void safe_rename(const char *subdir)
 {
 	char path[PATH_SIZE];
-	snprintf(path, sizeof(path), "%s/Maildir/.Spam/cur/%s:2,S", home, tmp_file);
-	safe_rename(path);
+	snprintf(path, sizeof(path), "%s/Maildir/%s/cur/%s:2,S", home, subdir, tmp_file);
+	_safe_rename(path);
 }
 
-static void ignore(void)
-{   /* Move to ignore and mark as read */
-	char path[PATH_SIZE];
-	snprintf(path, sizeof(path), "%s/Maildir/%s/cur/%s:2,S", home, IGNOREDIR, tmp_file);
-	safe_rename(path);
-}
+static inline void spam(void) { safe_rename(".Spam"); }
+
+static inline void ignore(void) { safe_rename(IGNOREDIR); }
 
 static int list_filter(char *line, struct entry *head)
 {
