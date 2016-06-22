@@ -72,6 +72,7 @@ static int drop_apps;
 static const char *logfile;
 static const char *home;
 static char *subject = "NONE";
+static char action = '?';
 
 static unsigned flags;
 #define IS_HAM			0x1
@@ -188,10 +189,10 @@ static void logit(void)
 	case SAW_APP: spam = 'A'; break;
 	case IS_SPAM | SAW_APP: spam = 'Z'; break;
 	}
-	fprintf(fp, "%-20s %c%c%c%c%c%c%c%c-- %.42s\n", tmp_file,
+	fprintf(fp, "%-20s %c%c%c%c%c%c%c%c-- %c %.42s\n", tmp_file,
 			OUT(IS_ME, 'M'), OUT(SAW_FROM, 'F'), OUT(SAW_DATE, 'D'),
 			OUT(IS_HAM, 'H'), OUT(IS_IGNORED, 'I'), spam,
-			OUT(FROM_ME, 'f'), OUT(BOGO_SPAM, 'B'), p);
+			OUT(FROM_ME, 'f'), OUT(BOGO_SPAM, 'B'), action, p);
 
 	if (ferror(fp))
 		syslog(LOG_ERR, "%s: write error", logfile);
@@ -369,16 +370,19 @@ static void filter(int fd)
 
 	if (flags & IS_IGNORED) {
 		/* Tell bogofilter this is ham */
+		action = 'I';
 		run_bogofilter(tmp_path, "-n");
 		ignore();
 	}
 	if (flags & IS_HAM) {
 		/* Tell bogofilter this is ham */
+		action = 'H';
 		run_bogofilter(tmp_path, "-n");
 		ham();
 	}
 	if ((flags & SAW_APP) && drop_apps) {
 		/* Tell bogofilter this is spam - down the road this can be merged into spam */
+		action = 'D';
 		run_bogofilter(tmp_path, "-s");
 		drop();
 	}
@@ -387,10 +391,12 @@ static void filter(int fd)
 		(flags & FROM_ME) ||
 		(run_drop && (flags & IS_ME) == 0)) {
 		/* Tell bogofilter this is spam */
+		action = 'S';
 		run_bogofilter(tmp_path, "-s");
 		spam();
 	}
 
+	action = 'h';
 	run_bogofilter(tmp_path, "-n");
 	ham();
 }
