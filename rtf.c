@@ -30,19 +30,21 @@
  *
  * 1) The ignore list (ignore)
  * 2) Whitelist (ham)
- * 3) Blacklist (spam)
- * 4) Check if the from and/or date fields are missing (spam)
- * 5) Check if from me (spam)
- * 5) Optionally check if not on the me list (spam)
- * 6) Optionally runs the emails through bogofilter (ham or spam)
+ * 3) Saw application attachment (drop)
+ * 4) Blacklist (spam)
+ * 5) Check if the from and/or date fields are missing (spam)
+ * 6) Check if from me (spam)
+ * 7) Optionally check if not on the me list (spam)
+ * 8) Optionally runs the emails through bogofilter (ham or spam)
  *
  * Actions:
  *
  * Ham moved to inbox and left as new.
  * Spam moved to spam folder and marked as read.
  * Ignore moved to ignore folder and marked as read.
+ * Drop moved to drop folder and marked as read.
  *
- * The from me (rule 5) is probably non-intuitive. I have my last name
+ * The from me (rule 6) is probably non-intuitive. I have my last name
  * white listed. All emails legitimately from me are of the form
  * <first name> <lastname> <email>. Spams are always just <email>. So
  * the whitelist catches the legitimate emails and the "from me"
@@ -63,23 +65,24 @@
 #include <sys/wait.h>
 
 #define BOGOFILTER "bogofilter"
-#define IGNOREDIR ".Ignore"
 
 static int run_bogo;
 static int run_drop;
+static int drop_apps;
 static const char *logfile;
 static const char *home;
 static char *subject = "NONE";
 
 static unsigned flags;
-#define IS_HAM			0x01
-#define IS_IGNORED		0x02
-#define IS_SPAM			0x04
-#define IS_ME			0x08
+#define IS_HAM			0x1
+#define IS_IGNORED		0x2
+#define IS_SPAM			0x4
+#define IS_ME			0x8
 #define FROM_ME			0x10
 #define SAW_DATE		0x20
 #define SAW_FROM		0x40
 #define BOGO_SPAM		0x80
+#define SAW_APP			0x100
 
 struct entry {
 	const char *str;
@@ -179,9 +182,15 @@ static void logit(void)
 
 #define OUT(a, c) ((flags & (a)) ? (c) : '-')
 	/* Last two flags are for learnem */
+	char spam = '-';
+	switch (flags & (IS_SPAM | SAW_APP)) {
+	case IS_SPAM: spam = 'S'; break;
+	case SAW_APP: spam = 'A'; break;
+	case IS_SPAM | SAW_APP: spam = 'Z'; break;
+	}
 	fprintf(fp, "%-20s %c%c%c%c%c%c%c%c-- %.42s\n", tmp_file,
 			OUT(IS_ME, 'M'), OUT(SAW_FROM, 'F'), OUT(SAW_DATE, 'D'),
-			OUT(IS_HAM, 'H'), OUT(IS_IGNORED, 'I'), OUT(IS_SPAM, 'S'),
+			OUT(IS_HAM, 'H'), OUT(IS_IGNORED, 'I'), spam,
 			OUT(FROM_ME, 'f'), OUT(BOGO_SPAM, 'B'), p);
 
 	if (ferror(fp))
@@ -287,7 +296,9 @@ static void safe_rename(const char *subdir)
 
 static inline void spam(void) { safe_rename(".Spam"); }
 
-static inline void ignore(void) { safe_rename(IGNOREDIR); }
+static inline void ignore(void) { safe_rename(".Ignore"); }
+
+static inline void drop(void) { safe_rename(".Drop"); }
 
 static int list_filter(char *line, struct entry *head)
 {
@@ -298,6 +309,11 @@ static int list_filter(char *line, struct entry *head)
 			return 1;
 
 	return 0;
+}
+
+static int check_type(const char *type)
+{
+	return strncmp(type, "octet-stream;", 13);
 }
 
 static void filter(int fd)
@@ -313,9 +329,9 @@ static void filter(int fd)
 		if (*buff == '\n')
 			break; /* end of buff */
 		else if (strncmp(buff, "To:", 3) == 0 ||
-				   strncmp(buff, "Cc:", 3) == 0 ||
-				   strncmp(buff, "CC:", 3) == 0 ||
-				   strncmp(buff, "Bcc:", 4) == 0) {
+				 strncmp(buff, "Cc:", 3) == 0 ||
+				 strncmp(buff, "CC:", 3) == 0 ||
+				 strncmp(buff, "Bcc:", 4) == 0) {
 			if (list_filter(buff, whitelist))
 				flags |= IS_HAM;
 			if (list_filter(buff, melist))
@@ -339,6 +355,10 @@ static void filter(int fd)
 				flags |= IS_SPAM;
 		} else if (strncmp(buff, "Date:", 5) == 0)
 			flags |= SAW_DATE;
+		else if (strncmp(buff, "Content-Type: application/", 26) == 0) {
+			if (check_type(buff + 26))
+				flags |= SAW_APP;
+		}
 	}
 
 	fclose(fp);
@@ -357,6 +377,11 @@ static void filter(int fd)
 		run_bogofilter(tmp_path, "-n");
 		ham();
 	}
+	if ((flags & SAW_APP) && drop_apps) {
+		/* Tell bogofilter this is spam - down the road this can be merged into spam */
+		run_bogofilter(tmp_path, "-s");
+		drop();
+	}
 	if ((flags & (IS_SPAM | BOGO_SPAM)) ||
 		(flags & SAW_FROM) == 0 || (flags & SAW_DATE) == 0 ||
 		(flags & FROM_ME) ||
@@ -373,8 +398,9 @@ static void filter(int fd)
 int main(int argc, char *argv[])
 {
 	int c;
-	while ((c = getopt(argc, argv, "bdl:")) != EOF)
+	while ((c = getopt(argc, argv, "abdl:")) != EOF)
 		switch (c) {
+		case 'a': drop_apps = 1; break;
 		case 'b': run_bogo = 1; break;
 		case 'd': run_drop = 1; break;
 		case 'l': logfile = optarg; break;
