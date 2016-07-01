@@ -8,7 +8,9 @@
 #include <errno.h>
 #include <poll.h>
 #include <dirent.h>
+#include <time.h>
 #include <syslog.h>
+#include <sys/stat.h>
 #include <sys/file.h>
 #ifdef __linux__
 #include <sys/inotify.h>
@@ -16,9 +18,12 @@
 #include <sys/event.h>
 #endif
 
-#define LEARN_DIR ".LearnSPAM"
-#define HAM_DIR ".Ham"
-#define SPAM_DIR ".Spam"
+/* These should be shared with rtf.c */
+#define LEARN_DIR		".LearnSPAM"
+#define HAM_DIR			".Ham"
+#define SPAM_DIR		".Spam"
+#define IGNORE_DIR		".Ignore"
+#define DROP_DIR		".Drop"
 
 #define INOTIFY_MASK IN_MOVED_TO
 
@@ -46,8 +51,12 @@ static struct timespec hourly_timeout = { .tv_sec = 60 * 60 * 1000 };
 static char learn_dir[MY_PATH_MAX];
 static char ham_dir[MY_PATH_MAX];
 static char spam_dir[MY_PATH_MAX];
+static char ignore_dir[MY_PATH_MAX];
+static char drop_dir[MY_PATH_MAX];
 static char config_dir[MY_PATH_MAX];
 static char *logfile;
+
+static time_t max_age;
 
 static void logit(const char *tmp_file, int is_spam)
 {
@@ -150,6 +159,45 @@ static void handle_ham(void)
 	closedir(dir);
 }
 
+static void cleanup_dir(const char *dname)
+{
+	DIR *dir = opendir(dname);
+	if (!dir) {
+		syslog(LOG_ERR, "opendir %s: %m", dname);
+		return;
+	}
+
+	time_t now = time(NULL);
+	time_t old = now - max_age;
+
+	struct dirent *ent;
+	while ((ent = readdir(dir))) {
+		if (*ent->d_name == '.') continue;
+
+		char path[MY_PATH_MAX];
+		snprintf(path, sizeof(path), "%s/%s", dname, ent->d_name);
+
+		struct stat sbuf;
+		if (stat(path, &sbuf)) {
+			syslog(LOG_ERR, "stat %s: %m", path);
+			continue;
+		}
+
+		if (sbuf.st_ctime < old)
+			if (unlink(path))
+				syslog(LOG_WARNING, "unlink %s: %m", path);
+	}
+
+	closedir(dir);
+}
+
+static void handle_cleanup_dirs(void)
+{
+	cleanup_dir(spam_dir);
+	cleanup_dir(ignore_dir);
+	cleanup_dir(drop_dir);
+}
+
 #ifdef __linux__
 static int setup_inotify(const char *dir)
 {
@@ -184,8 +232,24 @@ static void setup_kevent(int kq, struct kevent *event, const char *dir)
 }
 #endif
 
+static void set_max_age(const char *days)
+{
+	max_age = strtol(days, NULL, 0);
+	if (max_age < 2) {
+		syslog(LOG_WARNING, "Warning: setting age to 2 days.");
+		max_age = 2;
+	} else if (max_age > 365) {
+		syslog(LOG_WARNING, "Warning: setting age to 365 days.");
+		max_age = 365;
+	}
+
+	max_age *= 24 * 60 * 60; /* convert to seconds */
+}
+
 int main(int argc, char *argv[])
 {
+	int do_delete = 0;
+
 	char *home = getenv("HOME");
 	if (!home) {
 		syslog(LOG_ERR, "You are homeless.");
@@ -193,14 +257,19 @@ int main(int argc, char *argv[])
 	}
 
 	int c;
-	while ((c = getopt(argc, argv, "l:")) != EOF)
-		if (c == 'l')
-			logfile = optarg;
+	while ((c = getopt(argc, argv, "d:l:")) != EOF)
+		switch (c) {
+		case 'd': do_delete = 1; set_max_age(optarg); break;
+		case 'l': logfile = optarg; break;
+		default: puts("Sorry!"); exit(1);
+		}
 
 	snprintf(config_dir, sizeof(config_dir), "%s/.bogofilter", home);
 	snprintf(spam_dir, sizeof(spam_dir), "%s/Maildir/%s/cur", home, SPAM_DIR);
 	snprintf(learn_dir, sizeof(learn_dir), "%s/Maildir/%s/cur", home, LEARN_DIR);
 	snprintf(ham_dir, sizeof(ham_dir), "%s/Maildir/%s/cur", home, HAM_DIR);
+	snprintf(ignore_dir, sizeof(ham_dir), "%s/Maildir/%s/cur", home, IGNORE_DIR);
+	snprintf(drop_dir, sizeof(ham_dir), "%s/Maildir/%s/cur", home, DROP_DIR);
 
 #ifdef __linux__
 #define MAX_FDS 2
@@ -228,9 +297,13 @@ int main(int argc, char *argv[])
 	/* Run through the directories once */
 	handle_spam();
 	handle_ham();
+	if (do_delete)
+		handle_cleanup_dirs();
 
 	/* Trivial queuing. Since I tend to handle spam in chunks... hold
-	 * off and handle multiple messages at once. */
+	 * off and handle multiple messages at once. We switch to a more
+	 * aggressive timeout when we have something to process.
+	 */
 	TIMEOUT timeout = HOURLY_TIMEOUT;
 
 	while (1) {
@@ -243,6 +316,8 @@ int main(int argc, char *argv[])
 		if (n == 0) {
 			handle_spam();
 			handle_ham();
+			if (do_delete && timeout == HOURLY_TIMEOUT)
+				handle_cleanup_dirs();
 			timeout = HOURLY_TIMEOUT;
 		} else if (n > 0) {
 #ifdef __linux__
