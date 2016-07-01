@@ -1,4 +1,5 @@
 #include "rtf.h"
+#include <assert.h>
 
 static struct list {
 	const char *fname;
@@ -238,19 +239,30 @@ static void handle_actions(struct log_struct *l, struct sort_counts *sc)
 		++sc->bogo_total;
 }
 
-#define set_flags(v, c, f) do {					\
-		if ((v) == (c))							\
-			l.flags |= (f);					\
-		else if ((v) != '-')					\
-			printf("Unhandled flag %c: %s\n", v, line);	\
-	} while (0)
+static struct flag {
+	unsigned flag;
+	unsigned set;
+	char val;
+} flags[] = {
+	{ IS_ME,      'M' },
+	{ SAW_FROM,   'F' },
+	{ SAW_DATE,   'D' },
+	{ IS_HAM,     'H' },
+	{ IS_IGNORED, 'I' },
+	{ IS_SPAM,    'S' }, /* S or A or Z */
+	{ FROM_ME,    'f' },
+	{ BOGO_SPAM,  'B' },
+};
+#define NUM_FLAGS (sizeof(flags) / sizeof(struct flag))
 
 int main(int argc, char *argv[])
 {
 	char line[80];
-	int c, n, do_actions = 0;
+	int i, c, n, do_actions = 0;
 	struct log_struct l;
 	struct sort_counts sc;
+
+	assert(NUM_FLAGS == 8);
 
 	while ((c = getopt(argc, argv, "ad:v")) != EOF)
 		switch (c) {
@@ -268,13 +280,13 @@ int main(int argc, char *argv[])
 	memset(&sc, 0, sizeof(sc));
 
 	while (fgets(line, sizeof(line), stdin)) {
-		char is_me, saw_from, saw_date, is_ham, is_ignore, is_spam, from_me;
-		char bogo_spam, learn, learn_flag;
+		char learn, learn_flag;
 
 		if (sscanf(line, "%s %c%c%c%c%c%c%c%c%c%c%n",
-				   l.fname, &is_me, &saw_from, &saw_date,
-				   &is_ham, &is_ignore, &is_spam, &from_me,
-				   &bogo_spam, &learn, &learn_flag, &n) == 11) {
+				   l.fname,
+				   &flags[0].val, &flags[1].val, &flags[2].val, &flags[3].val,
+				   &flags[4].val, &flags[5].val, &flags[6].val, &flags[7].val,
+				   &learn, &learn_flag, &n) == 11) {
 			if (!date_in_range(l.fname)) continue;
 			++sc.total;
 			if (verbose)
@@ -292,24 +304,21 @@ int main(int argc, char *argv[])
 				case 'H': l.flags |= LEARN_HAM; break;
 				default: printf("Invalid learn flags %c\n", learn_flag);
 				}
-			else {
-				set_flags(is_me, 'M', IS_ME);
-				set_flags(saw_from, 'F', SAW_FROM);
-				set_flags(saw_date, 'D', SAW_DATE);
-				set_flags(is_ham, 'H', IS_HAM);
-				set_flags(is_ignore, 'I', IS_IGNORED);
-				set_flags(from_me, 'f', FROM_ME);
-				set_flags(bogo_spam, 'B', BOGO_SPAM);
-
-				/* Spam is special */
-				switch (is_spam) {
-				case 'S': l.flags |= IS_SPAM; break;
-				case 'A': l.flags |= SAW_APP; break;
-				case 'Z': l.flags |= IS_SPAM | SAW_APP; break;
-				case '-': break;
-				default: printf("Invalid spam flag %c\n", is_spam);
-				}
-			}
+			else
+				for (i = 0; i < NUM_FLAGS; ++i)
+					if (flags[i].flag & IS_SPAM)
+						/* Spam is special */
+						switch (flags[i].val) {
+						case 'S': l.flags |= IS_SPAM; break;
+						case 'A': l.flags |= SAW_APP; break;
+						case 'Z': l.flags |= IS_SPAM | SAW_APP; break;
+						case '-': break;
+						default: printf("Invalid spam flag %c\n", flags[i].val);
+						}
+					else if (flags[i].val == flags[i].set)
+						l.flags |= flags[i].flag;
+					else if (flags[i].val != '-')
+						printf("Unhandled flag %c: %s\n", flags[i].val, line);
 
 			if (do_actions)
 				handle_actions(&l, &sc);
