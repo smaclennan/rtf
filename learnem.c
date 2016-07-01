@@ -1,29 +1,12 @@
-#include <stdio.h>
-#include <stdlib.h>
-#include <stdint.h>
-#include <string.h>
-#include <unistd.h>
-#include <fcntl.h>
-#include <ctype.h>
-#include <errno.h>
+#include "rtf.h"
+
 #include <poll.h>
 #include <dirent.h>
-#include <time.h>
-#include <syslog.h>
-#include <sys/stat.h>
-#include <sys/file.h>
 #ifdef __linux__
 #include <sys/inotify.h>
 #else
 #include <sys/event.h>
 #endif
-
-/* These should be shared with rtf.c */
-#define LEARN_DIR		".LearnSPAM"
-#define HAM_DIR			".Ham"
-#define SPAM_DIR		".Spam"
-#define IGNORE_DIR		".Ignore"
-#define DROP_DIR		".Drop"
 
 #define INOTIFY_MASK IN_MOVED_TO
 

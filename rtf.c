@@ -51,17 +51,7 @@
  * catches the spams.
  */
 
-#define _GNU_SOURCE /* for strcasestr */
-#include <stdio.h>
-#include <stdlib.h>
-#include <string.h>
-#include <unistd.h>
-#include <fcntl.h>
-#include <ctype.h>
-#include <syslog.h>
-#include <errno.h>
-#include <time.h>
-#include <sys/file.h>
+#include "rtf.h"
 #include <sys/wait.h>
 
 #define BOGOFILTER "bogofilter"
@@ -75,15 +65,6 @@ static char *subject = "NONE";
 static char action = '?';
 
 static unsigned flags;
-#define IS_HAM			0x1
-#define IS_IGNORED		0x2
-#define IS_SPAM			0x4
-#define IS_ME			0x8
-#define FROM_ME			0x10
-#define SAW_DATE		0x20
-#define SAW_FROM		0x40
-#define BOGO_SPAM		0x80
-#define SAW_APP			0x100
 
 struct entry {
 	const char *str;
@@ -295,11 +276,11 @@ static void safe_rename(const char *subdir)
 	_safe_rename(path);
 }
 
-static inline void spam(void) { safe_rename(".Spam"); }
+static inline void spam(void) { safe_rename(SPAM_DIR); }
 
-static inline void ignore(void) { safe_rename(".Ignore"); }
+static inline void ignore(void) { safe_rename(IGNORE_DIR); }
 
-static inline void drop(void) { safe_rename(".Drop"); }
+static inline void drop(void) { safe_rename(DROP_DIR); }
 
 static int list_filter(char *line, struct entry *head)
 {
