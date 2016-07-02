@@ -302,6 +302,7 @@ int main(int argc, char *argv[])
 				switch (learn_flag) {
 				case 'S': l.flags |= LEARN_SPAM; break;
 				case 'H': l.flags |= LEARN_HAM; break;
+				case 'D': --sc.total; continue; /* ignore */
 				default: printf("Invalid learn flags %c\n", learn_flag);
 				}
 			else

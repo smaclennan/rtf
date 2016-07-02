@@ -41,7 +41,7 @@ static char *logfile;
 
 static time_t max_age;
 
-static void logit(const char *tmp_file, int is_spam)
+static void logit(const char *tmp_file, char flag)
 {
 	if (!logfile)
 		return;
@@ -64,7 +64,7 @@ static void logit(const char *tmp_file, int is_spam)
 	if ((p = strchr(tmp, ':'))) *p = 0;
 
 	/* Last two flags are for learnem */
-	fprintf(fp, "%-20s --------L%c\n", tmp, is_spam ? 'S' : 'H');
+	fprintf(fp, "%-20s --------L%c\n", tmp, flag);
 
 	if (ferror(fp))
 		syslog(LOG_ERR, "%s: write error", logfile);
@@ -104,7 +104,7 @@ static void handle_spam(void)
 		if (rename(old, new))
 			syslog(LOG_ERR, "rename(%s, %s) failed", old, new);
 		else
-			logit(ent->d_name, 1);
+			logit(ent->d_name, 'S');
 	}
 
 	closedir(dir);
@@ -136,18 +136,20 @@ static void handle_ham(void)
 		if (unlink(old))
 			syslog(LOG_ERR, "unlink %s: %s", old, strerror(errno));
 		else
-			logit(ent->d_name, 0);
+			logit(ent->d_name, 'H');
 	}
 
 	closedir(dir);
 }
 
-static void cleanup_dir(const char *dname)
+static int cleanup_dir(const char *dname)
 {
+	unsigned did_something = 0;
+
 	DIR *dir = opendir(dname);
 	if (!dir) {
 		syslog(LOG_ERR, "opendir %s: %m", dname);
-		return;
+		return 0;
 	}
 
 	time_t now = time(NULL);
@@ -166,19 +168,32 @@ static void cleanup_dir(const char *dname)
 			continue;
 		}
 
-		if (sbuf.st_ctime < old)
-			if (unlink(path))
+		if (sbuf.st_ctime < old) {
+			if (unlink(path) == 0)
+				++did_something;
+			else
 				syslog(LOG_WARNING, "unlink %s: %m", path);
+		}
 	}
 
 	closedir(dir);
+
+	return did_something;
 }
 
 static void handle_cleanup_dirs(void)
 {
-	cleanup_dir(spam_dir);
-	cleanup_dir(ignore_dir);
-	cleanup_dir(drop_dir);
+	unsigned did_something = 0;
+
+	did_something += cleanup_dir(spam_dir);
+	did_something += cleanup_dir(ignore_dir);
+	did_something += cleanup_dir(drop_dir);
+
+	if (did_something) {
+		char str[32];
+		snprintf(str, sizeof(str), "%ld.%09u", time(NULL), did_something);
+		logit(str, 'D');
+	}
 }
 
 #ifdef __linux__
