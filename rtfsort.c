@@ -239,6 +239,36 @@ static void handle_actions(struct log_struct *l, struct sort_counts *sc)
 		++sc->bogo_total;
 }
 
+static void handle_cleanup(const char *str)
+{
+	static time_t last_timestamp = 0;
+
+	char *e;
+	time_t timestamp = strtol(str, &e, 10);
+	if (*e == '.')
+		++e;
+	else {
+		printf("Invalid cleanup str: %s\n", str);
+		return;
+	}
+
+	time_t delta = 0;
+	if (last_timestamp) {
+		delta = timestamp - last_timestamp;
+		delta = (delta / 60 + 30) / 60; /* hours */
+	}
+	last_timestamp = timestamp;
+
+	unsigned n = strtoul(e, NULL, 10);
+
+	struct tm *tm = localtime(&timestamp);
+
+	printf("%u/%02u/%02u %02u:%02u:%02u delta %3ld   %u\n",
+		   tm->tm_year + 1900, tm->tm_mon + 1, tm->tm_mday,
+		   tm->tm_hour, tm->tm_min, tm->tm_sec,
+		   delta, n);
+}
+
 static struct flag {
 	unsigned flag;
 	unsigned set;
@@ -258,16 +288,19 @@ static struct flag {
 int main(int argc, char *argv[])
 {
 	char line[80];
-	int i, c, n, do_actions = 0;
+	int i, c, n, do_actions = 0, do_cleanup = 0;
 	struct log_struct l;
 	struct sort_counts sc;
 
 	assert(NUM_FLAGS == 8);
 
-	while ((c = getopt(argc, argv, "ad:v")) != EOF)
+	while ((c = getopt(argc, argv, "acd:v")) != EOF)
 		switch (c) {
 		case 'a': /* count actions */
 			do_actions = 1;
+			break;
+		case 'c':
+			do_cleanup = 1;
 			break;
 		case 'd':
 			set_dates(optarg);
@@ -302,7 +335,11 @@ int main(int argc, char *argv[])
 				switch (learn_flag) {
 				case 'S': l.flags |= LEARN_SPAM; break;
 				case 'H': l.flags |= LEARN_HAM; break;
-				case 'D': --sc.total; continue; /* ignore */
+				case 'D':
+					--sc.total;
+					if (do_cleanup)
+						handle_cleanup(l.fname);
+					continue;
 				default: printf("Invalid learn flags %c\n", learn_flag);
 				}
 			else
