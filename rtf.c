@@ -64,6 +64,14 @@ static const char *home;
 static char *subject = "NONE";
 static char action = '?';
 
+/* File mode is a special case for running rtf on existing email. It
+ * will move the mail to the spam or drop or ignore folders but leaves
+ * ham alone.
+ *
+ * File mode can only handle one file at a time.
+ */
+static const char *file_mode;
+
 static unsigned flags;
 
 struct entry {
@@ -137,7 +145,7 @@ static int create_tmp_file(void)
 write_error:
 	syslog(LOG_ERR, "%s: write error", tmp_path);
 	close(fd);
-	unlink(tmp_file);
+	unlink(tmp_path);
 	return -1;
 }
 
@@ -264,9 +272,11 @@ static void _safe_rename(const char *path)
 
 static void ham(void)
 {
-	char path[PATH_SIZE];
-	snprintf(path, sizeof(path), "%s/Maildir/new/%s", home, tmp_file);
-	_safe_rename(path);
+	if (!file_mode) {
+		char path[PATH_SIZE];
+		snprintf(path, sizeof(path), "%s/Maildir/new/%s", home, tmp_file);
+		_safe_rename(path);
+	}
 }
 
 static void safe_rename(const char *subdir)
@@ -293,12 +303,24 @@ static int list_filter(char *line, struct entry *head)
 	return 0;
 }
 
+/* Returns 1 if type should be dropped */
 static int check_type(const char *type)
 {
-	return strncmp(type, "octet-stream;", 13);
+	if (strncmp(type, "zip", 3) == 0)
+		return 1;
+	/* Catch x-compress and x-compressed */
+	if (strncmp(type, "x-compress", 10) == 0)
+		return 1;
+	/* x-zip and x-zip-compressed */
+	if (strncmp(type, "x-zip", 5) == 0)
+		return 1;
+	if (strncmp(type, "rar", 5) == 0)
+		return 1;
+
+	return 0;
 }
 
-static void filter(int fd)
+static void filter(void)
 {
 	FILE *fp = fopen(tmp_path, "r");
 	if (!fp) {
@@ -386,15 +408,36 @@ static void filter(int fd)
 	ham();
 }
 
+static int setup_file(const char *fname)
+{
+	if (*fname != '/') {
+		printf("File must be fully rooted!\n");
+		exit(1);
+	}
+
+	/* tmp_path is just fname */
+	snprintf(tmp_path, sizeof(tmp_path), "%s", fname);
+
+	/* tmp_file must be the raw basename */
+	char *p = strrchr(fname, '/');
+	snprintf(tmp_file, sizeof(tmp_file), "%s", p + 1);
+	p = strchr(tmp_file, ':');
+	if (p)
+		*p = '\0';
+
+	return 0;
+}
+
 int main(int argc, char *argv[])
 {
-	int c;
-	while ((c = getopt(argc, argv, "abdl:")) != EOF)
+	int c, rc;
+	while ((c = getopt(argc, argv, "abdl:F:")) != EOF)
 		switch (c) {
 		case 'a': drop_apps = 1; break;
 		case 'b': run_bogo = 1; break;
 		case 'd': run_drop = 1; break;
 		case 'l': logfile = optarg; break;
+		case 'F': file_mode = optarg; break;
 		}
 
 	home = getenv("HOME");
@@ -405,13 +448,17 @@ int main(int argc, char *argv[])
 
 	read_config();
 
-	int fd = create_tmp_file();
-	if (fd < 0)
+	if (file_mode)
+		rc = setup_file(file_mode);
+	else
+		rc = create_tmp_file();
+
+	if (rc < 0)
 		return 0; /* continue */
 
 	if (logfile)
 		atexit(logit);
 
-	filter(fd);
+	filter();
 	return 0; /* unreached */
 }
