@@ -168,7 +168,7 @@ static int cleanup_dir(const char *dname)
 			continue;
 		}
 
-		if (sbuf.st_ctime < old) {
+		if (sbuf.st_ctime < old || sbuf.st_mtime < old) {
 			if (unlink(path) == 0)
 				++did_something;
 			else
