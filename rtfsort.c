@@ -5,7 +5,7 @@ static struct list {
 	const char *fname;
 	const char *subject;
 	struct list *prev, *next;
-} *head, *tail;
+} *head, *tail, *ham;
 
 static int verbose;
 static time_t start = (time_t)-1, end = (time_t)-1;
@@ -34,6 +34,9 @@ struct sort_counts {
 	unsigned bogo;
 	unsigned bogo_total;
 	unsigned learned_ham;
+
+	/* only for check_ham */
+	unsigned bad_ham;
 };
 
 static void add_list(const char *fname, const char *subject)
@@ -80,6 +83,32 @@ static int check_list(const char *fname)
 			return 1;
 		}
 
+	return 0;
+}
+
+static void add_ham(const char *fname)
+{
+	struct list *l = calloc(1, sizeof(struct list));
+	fname = strdup(fname);
+	if (!l || !fname) {
+		puts("Out of memory");
+		exit(1);
+	}
+
+	l->fname = fname;
+	l->next = ham;
+	ham = l;
+}
+
+static int check_ham(const char *fname, struct sort_counts *sc)
+{
+	struct list *l;
+
+	for (l = ham; l; l = l->next)
+		if (strcmp(l->fname, fname) == 0) {
+			++sc->bad_ham;
+			return 1;
+		}
 	return 0;
 }
 
@@ -289,12 +318,13 @@ int main(int argc, char *argv[])
 {
 	char line[80];
 	int i, c, n, do_actions = 0, do_cleanup = 0;
+	int do_check_ham = 0;
 	struct log_struct l;
 	struct sort_counts sc;
 
 	assert(NUM_FLAGS == 8);
 
-	while ((c = getopt(argc, argv, "acd:v")) != EOF)
+	while ((c = getopt(argc, argv, "acd:hv")) != EOF)
 		switch (c) {
 		case 'a': /* count actions */
 			do_actions = 1;
@@ -304,6 +334,9 @@ int main(int argc, char *argv[])
 			break;
 		case 'd':
 			set_dates(optarg);
+			break;
+		case 'h':
+			do_check_ham = 1;
 			break;
 		case 'v':
 			++verbose;
@@ -358,6 +391,13 @@ int main(int argc, char *argv[])
 					else if (flags[i].val != '-')
 						printf("Unhandled flag %c: %s\n", flags[i].val, line);
 
+			if (do_check_ham) {
+				if (l.flags & IS_HAM)
+					add_ham(l.fname);
+				else if (l.flags & LEARN_SPAM)
+					check_ham(l.fname, &sc);
+			}
+
 			if (do_actions)
 				handle_actions(&l, &sc);
 			else
@@ -386,6 +426,13 @@ int main(int argc, char *argv[])
 
 		printf("Not me %u from me %u ignored %d real %u learned %u spam %u total %u\n",
 			   sc.not_me, sc.from, sc.ignored, sc.real, sc.learned, sc.spam, sc.total);
+	}
+
+	if (do_check_ham) {
+		if (sc.bad_ham)
+			printf("Bad ham %u\n", sc.bad_ham);
+		else
+			puts("No bad ham");
 	}
 
 	return 0;
