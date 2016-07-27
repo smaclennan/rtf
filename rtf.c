@@ -30,7 +30,7 @@
  *
  * 1) The ignore list (ignore)
  * 2) Whitelist (ham)
- * 3) Saw application attachment (drop)
+ * 3) Saw application attachment (spam)
  * 4) Blacklist (spam)
  * 5) Check if the from and/or date fields are missing (spam)
  * 6) Check if from me (spam)
@@ -42,7 +42,6 @@
  * Ham moved to inbox and left as new.
  * Spam moved to spam folder and marked as read.
  * Ignore moved to ignore folder and marked as read.
- * Drop moved to drop folder and marked as read.
  *
  * The from me (rule 6) is probably non-intuitive. I have my last name
  * white listed. All emails legitimately from me are of the form
@@ -290,8 +289,6 @@ static inline void spam(void) { safe_rename(SPAM_DIR); }
 
 static inline void ignore(void) { safe_rename(IGNORE_DIR); }
 
-static inline void drop(void) { safe_rename(DROP_DIR); }
-
 static int list_filter(char *line, struct entry *head)
 {
 	struct entry *e;
@@ -387,18 +384,11 @@ static void filter(void)
 		run_bogofilter(tmp_path, "-n");
 		ham();
 	}
-	if ((flags & SAW_APP) && drop_apps) {
-		/* Tell bogofilter this is spam - down the road this can be merged into spam */
-		action = 'D';
-		run_bogofilter(tmp_path, "-s");
-		drop();
-	}
-	if ((flags & (IS_SPAM | BOGO_SPAM)) ||
+	if ((flags & (IS_SPAM | BOGO_SPAM | FROM_ME | SAW_APP)) ||
 		(flags & SAW_FROM) == 0 || (flags & SAW_DATE) == 0 ||
-		(flags & FROM_ME) ||
 		(run_drop && (flags & IS_ME) == 0)) {
 		/* Tell bogofilter this is spam */
-		action = 'S';
+		action = (flags & SAW_APP) ? 'D' : 'S';
 		run_bogofilter(tmp_path, "-s");
 		spam();
 	}

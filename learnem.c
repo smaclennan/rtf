@@ -35,7 +35,6 @@ static char learn_dir[MY_PATH_MAX];
 static char ham_dir[MY_PATH_MAX];
 static char spam_dir[MY_PATH_MAX];
 static char ignore_dir[MY_PATH_MAX];
-static char drop_dir[MY_PATH_MAX];
 static char config_dir[MY_PATH_MAX];
 static char *logfile;
 
@@ -187,7 +186,6 @@ static void handle_cleanup_dirs(void)
 
 	did_something += cleanup_dir(spam_dir);
 	did_something += cleanup_dir(ignore_dir);
-	did_something += cleanup_dir(drop_dir);
 
 	if (did_something) {
 		char str[32];
@@ -267,7 +265,6 @@ int main(int argc, char *argv[])
 	snprintf(learn_dir, sizeof(learn_dir), "%s/Maildir/%s/cur", home, LEARN_DIR);
 	snprintf(ham_dir, sizeof(ham_dir), "%s/Maildir/%s/cur", home, HAM_DIR);
 	snprintf(ignore_dir, sizeof(ham_dir), "%s/Maildir/%s/cur", home, IGNORE_DIR);
-	snprintf(drop_dir, sizeof(ham_dir), "%s/Maildir/%s/cur", home, DROP_DIR);
 
 #ifdef __linux__
 #define MAX_FDS 2

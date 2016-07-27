@@ -31,6 +31,5 @@
 #define HAM_DIR			".Ham"
 #define SPAM_DIR		".Spam"
 #define IGNORE_DIR		".Ignore"
-#define DROP_DIR		".Drop"
 
 #endif
