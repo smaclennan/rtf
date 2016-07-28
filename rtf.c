@@ -303,16 +303,30 @@ static int list_filter(char *line, struct entry *head)
 /* Returns 1 if type should be dropped */
 static int check_type(const char *type)
 {
-	if (strncmp(type, "zip", 3) == 0)
-		return 1;
-	/* Catch x-compress and x-compressed */
-	if (strncmp(type, "x-compress", 10) == 0)
-		return 1;
-	/* x-zip and x-zip-compressed */
-	if (strncmp(type, "x-zip", 5) == 0)
-		return 1;
-	if (strncmp(type, "rar", 5) == 0)
-		return 1;
+	switch (*type) {
+	case 'x':
+		/* Catch x-compress and x-compressed */
+		if (strncmp(type, "x-compress", 10) == 0)
+			return 1;
+		/* x-zip and x-zip-compressed */
+		if (strncmp(type, "x-zip", 5) == 0)
+			return 1;
+		break;
+	case 'z':
+		if (strncmp(type, "zip", 3) == 0)
+			return 1;
+		break;
+	case 'r':
+		if (strncmp(type, "rar", 5) == 0)
+			return 1;
+		break;
+	case 'v':
+		/* Not sure about this one... */
+		if (drop_apps > 1)
+			if (strncmp(type, "vnd.ms-word.document.macroEnabled", 33) == 0)
+				return 1;
+		break;
+	}
 
 	return 0;
 }
@@ -423,7 +437,7 @@ int main(int argc, char *argv[])
 	int c, rc;
 	while ((c = getopt(argc, argv, "abdl:F:")) != EOF)
 		switch (c) {
-		case 'a': drop_apps = 1; break;
+		case 'a': ++drop_apps; break;
 		case 'b': run_bogo = 1; break;
 		case 'd': run_drop = 1; break;
 		case 'l': logfile = optarg; break;
