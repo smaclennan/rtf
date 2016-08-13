@@ -19,21 +19,25 @@ struct log_struct {
 struct sort_counts {
 	/* both */
 	unsigned total;
-	unsigned ignored;
+
+	/* only sort */
 	unsigned real;
 	unsigned spam;
 	unsigned learned;
-
-	/* only sort */
 	unsigned not_me;
 	unsigned from;
+	unsigned ignored;
 
 	/* only for actions */
 	unsigned drop;
 	unsigned ham;
+	unsigned spam_action;
 	unsigned bogo;
 	unsigned bogo_total;
+	unsigned ignore_action;
 	unsigned learned_ham;
+	unsigned learned_spam;
+	unsigned def; /* default */
 
 	/* only for check_ham */
 	unsigned bad_ham;
@@ -241,7 +245,7 @@ static void handle_line(struct log_struct *l, struct sort_counts *sc)
 static void handle_actions(struct log_struct *l, struct sort_counts *sc)
 {
 	if (l->flags & LEARN_SPAM) {
-		++sc->learned;
+		++sc->learned_spam;
 		return;
 	}
 	if (l->flags & LEARN_HAM) {
@@ -250,7 +254,7 @@ static void handle_actions(struct log_struct *l, struct sort_counts *sc)
 	}
 
 	if (l->flags & IS_IGNORED)
-		++sc->ignored;
+		++sc->ignore_action;
 	else if (l->flags & IS_HAM)
 		++sc->ham;
 	else if (l->flags & SAW_APP)
@@ -258,11 +262,11 @@ static void handle_actions(struct log_struct *l, struct sort_counts *sc)
 	else if ((l->flags & IS_SPAM) ||
 		(l->flags & SAW_FROM) == 0 || (l->flags & SAW_DATE) == 0 ||
 		(l->flags & FROM_ME) || (l->flags & IS_ME) == 0)
-		++sc->spam;
+		++sc->spam_action;
 	else if (l->flags & BOGO_SPAM)
 		++sc->bogo;
 	else
-		++sc->real;
+		++sc->def;
 
 	if (l->flags & BOGO_SPAM)
 		++sc->bogo_total;
@@ -317,18 +321,15 @@ static struct flag {
 int main(int argc, char *argv[])
 {
 	char line[80];
-	int i, c, n, do_actions = 0, do_cleanup = 0;
+	int i, c, n, do_cleanup = 0;
 	int do_check_ham = 0;
 	struct log_struct l;
 	struct sort_counts sc;
 
 	assert(NUM_FLAGS == 8);
 
-	while ((c = getopt(argc, argv, "acd:hv")) != EOF)
+	while ((c = getopt(argc, argv, "cd:hv")) != EOF)
 		switch (c) {
-		case 'a': /* count actions */
-			do_actions = 1;
-			break;
 		case 'c':
 			do_cleanup = 1;
 			break;
@@ -398,35 +399,32 @@ int main(int argc, char *argv[])
 					check_ham(l.fname, &sc);
 			}
 
-			if (do_actions)
-				handle_actions(&l, &sc);
-			else
-				handle_line(&l, &sc);
+			handle_line(&l, &sc);
+			handle_actions(&l, &sc);
 		} else
 			printf("PROBS: %s", line);
 	}
 
-	if (do_actions) {
-		printf("Ignored %u ham %u drop %u spam %u bogo %u real %u learned %u\n",
-			   sc.ignored, sc.ham, sc.drop, sc.spam, sc.bogo, sc.real, sc.learned);
+	if (sc.not_me + sc.ignored + sc.real + sc.learned + sc.spam != sc.total)
+		printf("Problems with total\n");
 
-		unsigned actual_spam = sc.spam + sc.drop + sc.bogo + sc.learned;
+	// dump_list();
 
-		printf("We caught %.0f%% bogofilter %.0f%% missed %.0f%%\n",
-			   (double)(sc.spam + sc.drop) * 100.0 / (double)actual_spam,
-			   (double)sc.bogo_total * 100.0 / (double)actual_spam,
-			   (double)sc.learned * 100.0 / (double)actual_spam);
-		printf("Spam was %.0f%% of all messages\n",
-			   (double)actual_spam * 100.0 / (double)sc.total);
-	} else {
-		if (sc.not_me + sc.ignored + sc.real + sc.learned + sc.spam != sc.total)
-			printf("Problems with total\n");
+	printf("Not me %u from me %u ignored %d real %u learned %u spam %u total %u\n",
+		   sc.not_me, sc.from, sc.ignored, sc.real, sc.learned, sc.spam, sc.total);
 
-		// dump_list();
+	printf("Actions:\n");
+	printf("  Ignored %u ham %u drop %u spam %u bogo %u real %u learned %u\n",
+		   sc.ignore_action, sc.ham, sc.drop, sc.spam_action, sc.bogo, sc.def, sc.learned_spam);
 
-		printf("Not me %u from me %u ignored %d real %u learned %u spam %u total %u\n",
-			   sc.not_me, sc.from, sc.ignored, sc.real, sc.learned, sc.spam, sc.total);
-	}
+	unsigned actual_spam = sc.spam_action + sc.drop + sc.bogo + sc.learned_spam;
+
+	printf("  We caught %.0f%% bogofilter %.0f%% missed %.0f%%\n",
+		   (double)(sc.spam_action + sc.drop) * 100.0 / (double)actual_spam,
+		   (double)sc.bogo_total * 100.0 / (double)actual_spam,
+		   (double)sc.learned_spam * 100.0 / (double)actual_spam);
+	printf("  Spam was %.0f%% of all messages\n",
+		   (double)actual_spam * 100.0 / (double)sc.total);
 
 	if (do_check_ham) {
 		if (sc.bad_ham)
