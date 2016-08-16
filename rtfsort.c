@@ -343,7 +343,8 @@ int main(int argc, char *argv[])
 	if (sc.not_me + sc.ignored + sc.real + sc.learned + sc.spam != sc.total)
 		printf("Problems with total\n");
 
-	printf("Not me %u from me %u ignored %d real %u learned %u spam %u total %u\n",
+	printf("Mail Stats:\n");
+	printf("  Not me %u from me %u ignored %d real %u learned %u spam %u total %u\n",
 		   sc.not_me, sc.from, sc.ignored, sc.real, sc.learned, sc.spam, sc.total);
 
 	printf("Actions:\n");
