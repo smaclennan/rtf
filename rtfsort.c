@@ -111,6 +111,8 @@ static int check_ham(const char *fname, struct sort_counts *sc)
 	for (l = ham; l; l = l->next)
 		if (strcmp(l->fname, fname) == 0) {
 			++sc->bad_ham;
+			if (verbose)
+				puts(fname);
 			return 1;
 		}
 	return 0;
@@ -322,22 +324,18 @@ int main(int argc, char *argv[])
 {
 	char line[80];
 	int i, c, n, do_cleanup = 0;
-	int do_check_ham = 0;
 	struct log_struct l;
 	struct sort_counts sc;
 
 	assert(NUM_FLAGS == 8);
 
-	while ((c = getopt(argc, argv, "cd:hv")) != EOF)
+	while ((c = getopt(argc, argv, "cd:v")) != EOF)
 		switch (c) {
 		case 'c':
 			do_cleanup = 1;
 			break;
 		case 'd':
 			set_dates(optarg);
-			break;
-		case 'h':
-			do_check_ham = 1;
 			break;
 		case 'v':
 			++verbose;
@@ -356,7 +354,7 @@ int main(int argc, char *argv[])
 				   &learn, &learn_flag, &n) == 11) {
 			if (!date_in_range(l.fname)) continue;
 			++sc.total;
-			if (verbose)
+			if (verbose > 1)
 				fputs(line, stderr);
 
 			if (line[n] == ' ')
@@ -392,12 +390,10 @@ int main(int argc, char *argv[])
 					else if (flags[i].val != '-')
 						printf("Unhandled flag %c: %s\n", flags[i].val, line);
 
-			if (do_check_ham) {
-				if (l.flags & IS_HAM)
-					add_ham(l.fname);
-				else if (l.flags & LEARN_SPAM)
-					check_ham(l.fname, &sc);
-			}
+			if (l.flags & IS_HAM)
+				add_ham(l.fname);
+			else if (l.flags & LEARN_SPAM)
+				check_ham(l.fname, &sc);
 
 			handle_line(&l, &sc);
 			handle_actions(&l, &sc);
@@ -426,12 +422,8 @@ int main(int argc, char *argv[])
 	printf("  Spam was %.0f%% of all messages\n",
 		   (double)actual_spam * 100.0 / (double)sc.total);
 
-	if (do_check_ham) {
-		if (sc.bad_ham)
-			printf("Bad ham %u\n", sc.bad_ham);
-		else
-			puts("No bad ham");
-	}
+	if (sc.bad_ham)
+		printf("Bad ham %u\n", sc.bad_ham);
 
 	return 0;
 }
