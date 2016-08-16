@@ -3,9 +3,9 @@
 
 static struct list {
 	const char *fname;
-	const char *subject;
-	struct list *prev, *next;
-} *head, *tail, *ham;
+	int bad;
+	struct list *next;
+} *ham;
 
 static int verbose;
 static time_t start = (time_t)-1, end = (time_t)-1;
@@ -43,53 +43,6 @@ struct sort_counts {
 	unsigned bad_ham;
 };
 
-static void add_list(const char *fname, const char *subject)
-{
-	struct list *l = calloc(1, sizeof(struct list));
-	fname = strdup(fname);
-	subject = strdup(subject);
-	if (!l || !fname || !subject) {
-		puts("Out of memory");
-		exit(1);
-	}
-
-	l->fname = fname;
-	l->subject = subject;
-
-	if (head) {
-		l->prev = tail;
-		tail->next = l;
-	} else
-		head = l;
-	tail = l;
-}
-
-static int check_list(const char *fname)
-{
-	struct list *l;
-
-	for (l = head; l; l = l->next)
-		if (strcmp(l->fname, fname) == 0) {
-			/* actually spam */
-			if (l->prev)
-				l->prev->next = l->next;
-			if (l->next)
-				l->next->prev = l->prev;
-			if (l == head)
-				head = l->next;
-			if (l == tail)
-				tail = l->prev;
-
-			free((void *)l->fname);
-			free((void *)l->subject);
-			free(l);
-
-			return 1;
-		}
-
-	return 0;
-}
-
 static void add_ham(const char *fname)
 {
 	struct list *l = calloc(1, sizeof(struct list));
@@ -111,19 +64,10 @@ static int check_ham(const char *fname, struct sort_counts *sc)
 	for (l = ham; l; l = l->next)
 		if (strcmp(l->fname, fname) == 0) {
 			++sc->bad_ham;
-			if (verbose)
-				puts(fname);
+			l->bad = 1;
 			return 1;
 		}
 	return 0;
-}
-
-void dump_list(void)
-{
-	struct list *l;
-
-	for (l = head; l; l = l->next)
-		puts(l->subject);
 }
 
 static int get_month(char *mstr)
@@ -214,11 +158,8 @@ static void handle_line(struct log_struct *l, struct sort_counts *sc)
 {
 	if (l->flags & LEARN_SPAM) {
 		++sc->learned;
-		if (check_list(l->fname)) {
-			--sc->real;
-			++sc->spam;
-		} else
-			printf("Problems %s\n", l->fname);
+		--sc->real;
+		++sc->spam;
 		return;
 	}
 	if (l->flags & LEARN_HAM) {
@@ -230,14 +171,12 @@ static void handle_line(struct log_struct *l, struct sort_counts *sc)
 
 	if (l->flags & IS_IGNORED)
 		++sc->ignored;
-	else if (l->flags & IS_HAM) {
+	else if (l->flags & IS_HAM)
 		++sc->real;
-		add_list(l->fname, l->subject);
-	} else if ((l->flags & IS_ME) == 0)
+	else if ((l->flags & IS_ME) == 0)
 		++sc->not_me;
 	else if ((l->flags & (BOGO_SPAM | FROM_ME)) == 0) {
 		++sc->real;
-		add_list(l->fname, l->subject);
 	} else
 		++sc->spam;
 	if (l->flags & FROM_ME)
@@ -404,8 +343,6 @@ int main(int argc, char *argv[])
 	if (sc.not_me + sc.ignored + sc.real + sc.learned + sc.spam != sc.total)
 		printf("Problems with total\n");
 
-	// dump_list();
-
 	printf("Not me %u from me %u ignored %d real %u learned %u spam %u total %u\n",
 		   sc.not_me, sc.from, sc.ignored, sc.real, sc.learned, sc.spam, sc.total);
 
@@ -422,8 +359,17 @@ int main(int argc, char *argv[])
 	printf("  Spam was %.0f%% of all messages\n",
 		   (double)actual_spam * 100.0 / (double)sc.total);
 
-	if (sc.bad_ham)
+	if (sc.bad_ham) {
 		printf("Bad ham %u\n", sc.bad_ham);
+
+		if (verbose) {
+			struct list *l;
+
+			for (l = ham; l; l = l->next)
+				if (l->bad)
+					printf("  %s\n", l->fname);
+		}
+	}
 
 	return 0;
 }
