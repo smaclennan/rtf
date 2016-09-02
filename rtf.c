@@ -63,6 +63,9 @@ static const char *home;
 static char *subject = "NONE";
 static char action = '?';
 
+/* For dry_run you probably want file mode too. */
+static int dry_run;
+
 /* File mode is a special case for running rtf on existing email. It
  * will move the mail to the spam or drop or ignore folders but leaves
  * ham alone.
@@ -260,6 +263,10 @@ static int run_bogofilter(const char *fname, char *flags)
 
 static void _safe_rename(const char *path)
 {
+	if (dry_run) {
+		printf("Action %c\n", action);
+		exit(0);
+	}
 	if (rename(tmp_path, path)) {
 		syslog(LOG_WARNING, "%s: %m", path);
 		unlink(tmp_path);
@@ -435,12 +442,13 @@ static int setup_file(const char *fname)
 int main(int argc, char *argv[])
 {
 	int c, rc;
-	while ((c = getopt(argc, argv, "abdl:F:")) != EOF)
+	while ((c = getopt(argc, argv, "abdl:nF:")) != EOF)
 		switch (c) {
 		case 'a': ++drop_apps; break;
 		case 'b': run_bogo = 1; break;
 		case 'd': run_drop = 1; break;
 		case 'l': logfile = optarg; break;
+		case 'n': dry_run = 1; break;
 		case 'F': file_mode = optarg; break;
 		}
 
