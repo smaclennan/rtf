@@ -381,7 +381,7 @@ static void filter(void)
 
 	if (drop_apps)
 		while (fgets(buff, sizeof(buff), fp))
-	 		if (strncmp(buff, "Content-Type: application/", 26) == 0)
+			if (strncasecmp(buff, "Content-Type: application/", 26) == 0)
 				if (check_type(buff + 26)) {
 					flags |= SAW_APP;
 					break;
