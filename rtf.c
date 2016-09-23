@@ -310,6 +310,14 @@ static int list_filter(char *line, struct entry *head)
 /* Returns 1 if type should be dropped */
 static int check_type(const char *type)
 {
+	while (isspace(*type))
+		++type;
+
+	if (strncasecmp(type, "application/", 12))
+		return 0;
+
+	type += 12;
+
 	switch (*type) {
 	case 'x':
 		/* Catch x-compress and x-compressed */
@@ -381,8 +389,8 @@ static void filter(void)
 
 	if (drop_apps)
 		while (fgets(buff, sizeof(buff), fp))
-			if (strncasecmp(buff, "Content-Type: application/", 26) == 0)
-				if (check_type(buff + 26)) {
+			if (strncasecmp(buff, "Content-Type:", 13) == 0)
+				if (check_type(buff + 13)) {
 					flags |= SAW_APP;
 					break;
 				}
