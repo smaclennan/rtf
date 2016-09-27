@@ -341,6 +341,10 @@ static int check_type(const char *type)
 			if (strncmp(type, "vnd.ms-word.document.macroEnabled", 33) == 0)
 				return 1;
 		break;
+	case 'o':
+		if (strncmp(type, "octet-stream", 12) == 0)
+			return 1;
+		break;
 	}
 
 	return 0;
