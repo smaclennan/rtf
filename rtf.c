@@ -326,6 +326,9 @@ static int check_type(const char *type)
 		/* x-zip and x-zip-compressed */
 		if (strncmp(type, "x-zip", 5) == 0)
 			return 1;
+		/* x-rar and x-rar-compressed */
+		if (strncmp(type, "x-rar", 5) == 0)
+			return 1;
 		break;
 	case 'z':
 		if (strncmp(type, "zip", 3) == 0)
