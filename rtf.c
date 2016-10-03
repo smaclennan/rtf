@@ -339,10 +339,13 @@ static int check_type(const char *type)
 			return 1;
 		break;
 	case 'v':
-		/* Not sure about this one... */
-		if (drop_apps > 1)
+		/* Not sure about these... */
+		if (drop_apps > 1) {
 			if (strncmp(type, "vnd.ms-word.document.macroEnabled", 33) == 0)
 				return 1;
+			if (strncmp(type, "vnd.ms-excel", 12) == 0)
+				return 1;
+		}
 		break;
 	case 'o':
 		if (strncmp(type, "octet-stream", 12) == 0)
