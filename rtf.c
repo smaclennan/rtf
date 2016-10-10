@@ -395,9 +395,13 @@ static void filter(void)
 				flags |= IS_SPAM;
 		} else if (strncmp(buff, "Date:", 5) == 0)
 			flags |= SAW_DATE;
+		else if (strncasecmp(buff, "Content-Type:", 13) == 0) {
+			if (check_type(buff + 13))
+				flags |= SAW_APP;
+		}
 	}
 
-	if (drop_apps)
+	if (drop_apps && !(flags & SAW_APP))
 		while (fgets(buff, sizeof(buff), fp))
 			if (strncasecmp(buff, "Content-Type:", 13) == 0)
 				if (check_type(buff + 13)) {
