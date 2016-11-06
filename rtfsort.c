@@ -353,12 +353,10 @@ int main(int argc, char *argv[])
 
 	unsigned actual_spam = sc.spam_action + sc.drop + sc.bogo + sc.learned_spam;
 
-	printf("  We caught %.0f%% bogofilter %.0f%% missed %.0f%%\n",
+	printf("We caught %.0f%% bogofilter %.0f%% missed %.0f%%\n",
 		   (double)(sc.spam_action + sc.drop) * 100.0 / (double)actual_spam,
 		   (double)sc.bogo_total * 100.0 / (double)actual_spam,
 		   (double)sc.learned_spam * 100.0 / (double)actual_spam);
-	printf("  Spam was %.0f%% of all messages\n",
-		   (double)actual_spam * 100.0 / (double)sc.total);
 
 	if (sc.bad_ham) {
 		printf("Bad ham %u\n", sc.bad_ham);
@@ -371,6 +369,9 @@ int main(int argc, char *argv[])
 					printf("  %s\n", l->fname);
 		}
 	}
+
+	printf("Spam was %.0f%% of all messages\n",
+		   (double)actual_spam * 100.0 / (double)sc.total);
 
 	return 0;
 }
