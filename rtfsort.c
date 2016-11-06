@@ -1,5 +1,6 @@
 #include "rtf.h"
 #include <assert.h>
+#include <limits.h>
 
 static struct list {
 	const char *fname;
@@ -9,6 +10,7 @@ static struct list {
 
 static int verbose;
 static time_t start = (time_t)-1, end = (time_t)-1;
+static time_t min_date = INT_MAX, max_date;
 
 struct log_struct {
 	char fname[80];
@@ -142,6 +144,11 @@ static int date_in_range(char *fname)
 		printf("Problems with date\n");
 		return 1;
 	}
+	
+	if (date < min_date)
+		  min_date = date;
+	if (date > max_date)
+		  max_date = date;
 
 	if (start != (time_t)-1)
 		if (date < start)
@@ -243,6 +250,17 @@ static void handle_cleanup(const char *str)
 		   delta, n);
 }
 
+char *strdate(time_t date)
+{
+	struct tm *tm = localtime(&date);
+	char *str = malloc(16);
+	if (!str)
+		  return NULL;
+	snprintf(str, 16, "%d/%d/%d", 
+	         tm->tm_year + 1900, tm->tm_mon + 1, tm->tm_mday);
+    return str;
+}
+
 static struct flag {
 	unsigned flag;
 	unsigned set;
@@ -340,6 +358,8 @@ int main(int argc, char *argv[])
 			printf("PROBS: %s", line);
 	}
 
+	printf("Summary %s to %s\n", strdate(min_date), strdate(max_date));
+	
 	if (sc.not_me + sc.ignored + sc.real + sc.learned + sc.spam != sc.total)
 		printf("Problems with total\n");
 
@@ -353,13 +373,12 @@ int main(int argc, char *argv[])
 
 	unsigned actual_spam = sc.spam_action + sc.drop + sc.bogo + sc.learned_spam;
 
-	printf("We caught %.0f%% bogofilter %.0f%% missed %.0f%%\n",
+	printf("We caught %.0f%% bogofilter %.0f%% missed %.0f%%.",
 		   (double)(sc.spam_action + sc.drop) * 100.0 / (double)actual_spam,
 		   (double)sc.bogo_total * 100.0 / (double)actual_spam,
 		   (double)sc.learned_spam * 100.0 / (double)actual_spam);
-
 	if (sc.bad_ham) {
-		printf("Bad ham %u\n", sc.bad_ham);
+		printf(" Bad ham %u.", sc.bad_ham);
 
 		if (verbose) {
 			struct list *l;
@@ -369,6 +388,7 @@ int main(int argc, char *argv[])
 					printf("  %s\n", l->fname);
 		}
 	}
+	putchar('\n');
 
 	printf("Spam was %.0f%% of all messages\n",
 		   (double)actual_spam * 100.0 / (double)sc.total);
