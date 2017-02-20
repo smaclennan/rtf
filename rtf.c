@@ -145,16 +145,28 @@ static int create_tmp_file(void)
 		if (write(fd, buff, n) != n)
 			goto write_error;
 
-	if (n < 0)
+	if (fsync(fd))
 		goto write_error;
 
-	close(fd);
+	if (close(fd)) {
+		fd = -1;
+		goto write_error;
+	}
+
+	if (n < 0)
+		goto read_error;
 
 	return 0;
 
 write_error:
 	syslog(LOG_ERR, "%s: write error", tmp_path);
-	close(fd);
+	if (fd != -1)
+		close(fd);
+	unlink(tmp_path);
+	return -1;
+
+read_error:
+	syslog(LOG_ERR, "%s: read error", tmp_path);
 	unlink(tmp_path);
 	return -1;
 }
