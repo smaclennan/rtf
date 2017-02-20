@@ -103,7 +103,7 @@ static char buff[8096];
 
 static char tmp_file[84], tmp_path[PATH_SIZE];
 
-/* Not NFS safe and I don't care. */
+/* Should be NFS safe iff all hostnames are unique. */
 static int create_tmp_file(void)
 {
 	char hostname[64];
