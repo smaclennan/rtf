@@ -56,6 +56,7 @@
 #define BOGOFILTER "bogofilter"
 
 static int run_bogo;
+static int train_bogo;
 static int run_drop;
 static int drop_apps;
 static const char *logfile;
@@ -296,6 +297,8 @@ static inline void spam(void) { safe_rename(SPAM_DIR); }
 
 static inline void ignore(void) { safe_rename(IGNORE_DIR); }
 
+static inline void drop(void) { safe_rename(DROP_DIR); }
+
 static int list_filter(char *line, struct entry *head)
 {
 	struct entry *e;
@@ -411,9 +414,10 @@ static void filter(void)
 
 	fclose(fp);
 
-	/* Just check the mail... do not update the word lists */
-	if (run_bogofilter(tmp_path, "") == 0)
-		flags |= BOGO_SPAM;
+	if (!train_bogo)
+		/* Just check the mail... do not update the word lists */
+		if (run_bogofilter(tmp_path, "") == 0)
+			flags |= BOGO_SPAM;
 
 	if (flags & IS_IGNORED) {
 		/* Tell bogofilter this is ham */
@@ -427,13 +431,18 @@ static void filter(void)
 		run_bogofilter(tmp_path, "-n");
 		ham();
 	}
-	if ((flags & (IS_SPAM | BOGO_SPAM | FROM_ME | SAW_APP)) ||
+	if ((flags & (IS_SPAM | BOGO_SPAM | FROM_ME)) ||
 		(flags & SAW_FROM) == 0 || (flags & SAW_DATE) == 0 ||
 		(run_drop && (flags & IS_ME) == 0)) {
 		/* Tell bogofilter this is spam */
-		action = (flags & SAW_APP) ? 'D' : 'S';
+		action = 'S';
 		run_bogofilter(tmp_path, "-s");
 		spam();
+	}
+	if (flags & SAW_APP) {
+		action = 'D';
+		run_bogofilter(tmp_path, "-s");
+		drop();
 	}
 
 	action = 'h';
@@ -464,7 +473,7 @@ static int setup_file(const char *fname)
 int main(int argc, char *argv[])
 {
 	int c, rc;
-	while ((c = getopt(argc, argv, "abdl:nF:")) != EOF)
+	while ((c = getopt(argc, argv, "abdl:nF:T")) != EOF)
 		switch (c) {
 		case 'a': ++drop_apps; break;
 		case 'b': run_bogo = 1; break;
@@ -472,6 +481,7 @@ int main(int argc, char *argv[])
 		case 'l': logfile = optarg; break;
 		case 'n': dry_run = 1; break;
 		case 'F': file_mode = optarg; break;
+		case 'T': train_bogo = run_bogo = 1; break;
 		}
 
 	home = getenv("HOME");

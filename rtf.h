@@ -30,6 +30,8 @@
 #define LEARN_DIR		".LearnSPAM"
 #define HAM_DIR			".Ham"
 #define SPAM_DIR		".Spam"
+/* The drop dir can be the same as the spam dir */
+#define DROP_DIR		".Drop"
 #define IGNORE_DIR		".Ignore"
 
 #endif
