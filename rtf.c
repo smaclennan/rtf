@@ -21,8 +21,8 @@
  *
  * whitelist - To or From that should be marked ham
  * blacklist - From or Subject that should be marked spam
- * me - list of my emails (see below)
  * ignore - From that should be ignored
+ * me - list of my emails (see below)
  *
  * Note: To includes To, Cc, and Bcc.
  *
@@ -30,24 +30,31 @@
  *
  * 1) The ignore list (ignore)
  * 2) Whitelist (ham)
- * 3) Saw application attachment (spam)
- * 4) Blacklist (spam)
+ * 3) Blacklist (spam)
+ * 4) Check if from me (spam)
  * 5) Check if the from and/or date fields are missing (spam)
- * 6) Check if from me (spam)
+ * 6) Optionally runs the emails through bogofilter (ham or spam)
  * 7) Optionally check if not on the me list (spam)
- * 8) Optionally runs the emails through bogofilter (ham or spam)
+ * 8) Optionally check if saw application attachment (app)
  *
  * Actions:
  *
  * Ham moved to inbox and left as new.
  * Spam moved to spam folder and marked as read.
  * Ignore moved to ignore folder and marked as read.
+ * Application attachment moved to drop folder and marked as read.
  *
- * The from me (rule 6) is probably non-intuitive. I have my last name
+ * The from me (rule 4) is probably non-intuitive. I have my last name
  * white listed. All emails legitimately from me are of the form
- * <first name> <lastname> <email>. Spams are always just <email>. So
- * the whitelist catches the legitimate emails and the "from me"
- * catches the spams.
+ * <first name> <lastname> <email>. Spams are almost always just
+ * <email>. So the whitelist catches the legitimate emails and the
+ * "from me" catches the spams. We do get a few false positive hams
+ * because of this.
+ *
+ * Notes:
+ *
+ * If you enable app checking, we need to read the entire email to
+ * check for attachments. Normally, only the header needs to be read.
  */
 
 #include "rtf.h"
@@ -419,27 +426,33 @@ static void filter(void)
 		if (run_bogofilter(tmp_path, "") == 0)
 			flags |= BOGO_SPAM;
 
+	/* Rule 1 */
 	if (flags & IS_IGNORED) {
 		/* Tell bogofilter this is ham */
 		action = 'I';
 		run_bogofilter(tmp_path, "-n");
 		ignore();
 	}
+	/* Rule 2 */
 	if (flags & IS_HAM) {
 		/* Tell bogofilter this is ham */
 		action = 'H';
 		run_bogofilter(tmp_path, "-n");
 		ham();
 	}
-	if ((flags & (IS_SPAM | BOGO_SPAM | FROM_ME)) ||
+	/* Rule 3, 4, 6 */
+	if ((flags & (IS_SPAM | FROM_ME | BOGO_SPAM)) ||
+		/* Rule 5 */
 		(flags & SAW_FROM) == 0 || (flags & SAW_DATE) == 0 ||
+		/* Rule 7 */
 		(run_drop && (flags & IS_ME) == 0)) {
 		/* Tell bogofilter this is spam */
 		action = 'S';
 		run_bogofilter(tmp_path, "-s");
 		spam();
 	}
-	if (flags & SAW_APP) {
+	/* Rule 8 */
+	if (drop_apps && (flags & SAW_APP)) {
 		action = 'D';
 		run_bogofilter(tmp_path, "-s");
 		drop();
