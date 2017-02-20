@@ -228,7 +228,7 @@ static int read_config(void)
 
 	char line[128];
 	while (fgets(line, sizeof(line), fp)) {
-		char *p = strtok(line, " \t\r\n");
+		char *p = strtok(line, "\r\n");
 		if (!p || *p == '#')
 			continue;
 		if (*line == '[') {
