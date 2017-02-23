@@ -1,18 +1,32 @@
-qmail + rtf + bogofilter
+qmail + rtf
+-----------
 
-I have three folders in my Maildir to handle spam: Spam, LearnSPAM,
-and Ham. I also have one folder to handle emails I am ignoring:
-Ignore.
+I have two folders in my Maildir to handle spam: Spam and Drop. You
+don't need two, the dropped files can go in Spam.
+
+I also have one folder to handle emails I am ignoring. The Ignore
+directory is email from legitimate sources, such as stores I have
+purchased from, that I really don't care about. So I move them into an
+Ignore directory and mark them read. After a week, they are deleted.
 
 My .qmail file is two lines and looks like this:
 
-|/home/seanm/bin/rtf -bd -l /home/seanm/.bogofilter/rtf.log
+|/usr/bin/rtf -aadl /home/seanm/.bogofilter/rtf.log
 ./Maildir/
 
 The ./Maildir/ is just to handle error conditions. If there are no
 errors, rtf returns 99 and the Maildir rule is skipped.
 
-Spam is moved to the Spam directory and marked as read.
+
+qmail + rtf + bogofilter
+------------------------
+
+For bogofilter I add two more folders: LearnSPAM, and Ham.
+
+My .qmail file also has the 'b' option to enable bogofilter.
+
+|/usr/bin/rtf -aabdl /home/seanm/.bogofilter/rtf.log
+./Maildir/
 
 If an email is marked as ham but is really spam, I move the email to
 the LearnSPAM folder.
@@ -20,10 +34,5 @@ the LearnSPAM folder.
 If an email is marked as spam, but it really ham, I copy (not move)
 the email to the Ham folder.
 
-The daemon `learnem' runs and handles processing the .LearnSPAM and
-.Ham directories.
-
-The Ignore directory is email from legitimate sources, such as stores
-I have purchased from, that I really don't care about. So I move them
-into an Ignore directory and mark them read. After a week, they are
-deleted.
+The daemon `learnem' runs and handles processing the LearnSPAM and
+Ham directories.
