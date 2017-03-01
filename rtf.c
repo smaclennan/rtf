@@ -60,6 +60,10 @@
 #include "rtf.h"
 #include <sys/wait.h>
 
+#ifdef SAMLIB
+#include <samlib.h>
+#endif
+
 #define BOGOFILTER "bogofilter"
 
 static int run_bogo;
@@ -70,6 +74,7 @@ static const char *logfile;
 static const char *home;
 static char *subject = "NONE";
 static char action = '?';
+static char *dbname;
 
 /* For dry_run you probably want file mode too. */
 static int dry_run;
@@ -229,6 +234,19 @@ oom:
 	syslog(LOG_WARNING, "Out of memory.");
 }
 
+static void blacklist_count(struct entry *e)
+{
+#ifdef SAMLIB
+	if (dbname) {
+		if (db_open(dbname, DB_CREATE, NULL))
+			syslog(LOG_WARNING, "Unable to open %s\n", dbname);
+		else if (db_inc_long(NULL, e->str))
+			syslog(LOG_WARNING, "Unable to update %s\n", dbname);
+		db_close(NULL);
+	}
+#endif
+}
+
 static int read_config(void)
 {
 	char fname[PATH_SIZE];
@@ -318,15 +336,15 @@ static inline void ignore(void) { safe_rename(IGNORE_DIR); }
 
 static inline void drop(void) { safe_rename(DROP_DIR); }
 
-static int list_filter(char *line, struct entry *head)
+static struct entry *list_filter(char *line, struct entry *head)
 {
 	struct entry *e;
 
 	for (e = head; e; e = e->next)
 		if (strcasestr(line, e->str))
-			return 1;
+			return e;
 
-	return 0;
+	return NULL;
 }
 
 /* Returns 1 if type should be dropped */
@@ -380,6 +398,7 @@ static int check_type(const char *type)
 
 static void filter(void)
 {
+	struct entry *e;
 	FILE *fp = fopen(tmp_path, "r");
 	if (!fp) {
 		syslog(LOG_WARNING, "%s: %m", tmp_path);
@@ -404,8 +423,10 @@ static void filter(void)
 				flags |= IS_HAM;
 			if (list_filter(buff, ignorelist))
 				flags |= IS_IGNORED;
-			if (list_filter(buff, blacklist))
+			if ((e = list_filter(buff, blacklist))) {
 				flags |= IS_SPAM;
+				blacklist_count(e);
+			}
 			if (list_filter(buff, melist))
 				flags |= FROM_ME;
 		} else if (strncmp(buff, "Subject:", 8) == 0) {
@@ -413,8 +434,10 @@ static void filter(void)
 				strtok(subject, "\r\n");
 			else
 				subject = "NOMEM";
-			if (list_filter(buff, blacklist))
+			if ((e = list_filter(buff, blacklist))) {
 				flags |= IS_SPAM;
+				blacklist_count(e);
+			}
 		} else if (strncmp(buff, "Date:", 5) == 0)
 			flags |= SAW_DATE;
 		else if (strncasecmp(buff, "Content-Type:", 13) == 0) {
@@ -498,10 +521,11 @@ static int setup_file(const char *fname)
 int main(int argc, char *argv[])
 {
 	int c, rc;
-	while ((c = getopt(argc, argv, "abdl:nF:T")) != EOF)
+	while ((c = getopt(argc, argv, "abc:dl:nF:T")) != EOF)
 		switch (c) {
 		case 'a': ++drop_apps; break;
 		case 'b': run_bogo = 1; break;
+		case 'c': dbname = optarg; break;
 		case 'd': run_drop = 1; break;
 		case 'l': logfile = optarg; break;
 		case 'n': dry_run = 1; break;
