@@ -6,6 +6,8 @@
 #include <fcntl.h>
 #include <ctype.h>
 #include <errno.h>
+
+#ifdef SAMLIB
 #include <samlib.h>
 
 
@@ -25,9 +27,10 @@ int main(int argc, char *argv[])
 
 	return 0;
 }
-
-/*
- * Local Variables:
- * compile-command: "gcc -O3 -Wall rtfdbdump.c -o rtfdbdump"
- * End:
- */
+#else
+int main(int argc, char *argv[])
+{
+	puts("Sorry. Disabled at compile time.");
+	return 1;
+}
+#endif
