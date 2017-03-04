@@ -3,19 +3,10 @@
 D = -O2
 CFLAGS += -Wall $(D:1=-g)
 
-# SAMLIB is only needed for logging blacklist usage.
-# If SAMLIB not defined you do not need -lsamlib or -ldb
-CFLAGS += -DSAMLIB
-SAMLIB ?= -lsamlib
-DB ?= -ldb
-
-all: rtf learnem rtfsort rtfdbdump
+all: rtf learnem rtfsort
 
 rtf: rtf.c
-	$(CC) $(CFLAGS) -o $@ $< $(SAMLIB) $(DB)
-
-rtfdbdump: rtfdbdump.c
-	$(CC) $(CFLAGS) -o $@ $< $(SAMLIB) $(DB)
+	$(CC) $(CFLAGS) -o $@ $<
 
 clean:
-	rm -f rtf learnem rtfsort rtfdbdump
+	rm -f rtf learnem rtfsort

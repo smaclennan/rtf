@@ -234,17 +234,56 @@ oom:
 	syslog(LOG_WARNING, "Out of memory.");
 }
 
+/* For some reason libdb could not open the db file when run from
+ * .qmail. Switch to a trivial text file.
+ */
 static void blacklist_count(struct entry *e)
 {
-#ifdef SAMLIB
 	if (dbname) {
-		if (db_open(dbname, DB_CREATE, NULL))
+		FILE *in, *out;
+		char tmpname[128], line[128];
+		int len, matched = 0;
+
+		snprintf(tmpname, sizeof(tmpname), "%s.TMP", dbname);
+		if (strcmp(tmpname, dbname) == 0) {
+			syslog(LOG_WARNING, "dbname too long (%ld)\n", strlen(dbname));
+			return;
+		}
+
+		if (!(out = fopen(tmpname, "w"))) {
+			syslog(LOG_WARNING, "Unable to create %s\n", tmpname);
+			return;
+		}
+		if (!(in = fopen(dbname, "r"))) {
+			if (errno == ENOENT) {
+				syslog(LOG_INFO, "Creating db %s\n", dbname);
+				goto outit;
+			}
+
+			fclose(out);
 			syslog(LOG_WARNING, "Unable to open %s\n", dbname);
-		else if (db_inc_long(NULL, e->str))
-			syslog(LOG_WARNING, "Unable to update %s\n", dbname);
-		db_close(NULL);
+			return;
+		}
+
+		len = strlen(e->str);
+		while (fgets(line, sizeof(line), in)) {
+			if (strncmp(line, e->str, len) == 0) {
+				long count = strtol(line + len, NULL, 10);
+				fprintf(out, "%s %ld\n", e->str, ++count);
+				matched = 1;
+			} else
+				fputs(line, out);
+		}
+
+	outit:
+		if (!matched)
+			fprintf(out, "%s 1\n", e->str);
+
+		if (in)  fclose(in);
+		if (out) fclose(out);
+
+		rename(tmpname, dbname);
 	}
-#endif
 }
 
 static int read_config(void)
