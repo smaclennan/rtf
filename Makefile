@@ -3,6 +3,7 @@
 D = -O2
 CFLAGS += -Wall $(D:1=-g)
 
+# SAMLIB is only needed for logging blacklist usage.
 # If SAMLIB not defined you do not need -lsamlib or -ldb
 CFLAGS += -DSAMLIB
 SAMLIB ?= -lsamlib
