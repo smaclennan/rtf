@@ -60,10 +60,6 @@
 #include "rtf.h"
 #include <sys/wait.h>
 
-#ifdef SAMLIB
-#include <samlib.h>
-#endif
-
 #define BOGOFILTER "bogofilter"
 
 static int run_bogo;
@@ -244,7 +240,7 @@ static void blacklist_count(struct entry *e)
 		char tmpname[128], line[128];
 		int len, matched = 0;
 
-		snprintf(tmpname, sizeof(tmpname), "%s.TMP", dbname);
+		snprintf(tmpname, sizeof(tmpname), "%s.%d", dbname, getpid());
 		if (strcmp(tmpname, dbname) == 0) {
 			syslog(LOG_WARNING, "dbname too long (%ld)\n", strlen(dbname));
 			return;
@@ -264,6 +260,8 @@ static void blacklist_count(struct entry *e)
 			syslog(LOG_WARNING, "Unable to open %s\n", dbname);
 			return;
 		}
+
+		flock(fileno(in), LOCK_EX);
 
 		len = strlen(e->str);
 		while (fgets(line, sizeof(line), in)) {
