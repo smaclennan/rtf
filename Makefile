@@ -2,15 +2,19 @@
 # returns -g, else it returns the default (-O2).
 D = -O2
 CFLAGS += -Wall $(D:1=-g)
+
+# If SAMLIB not defined you do not need -lsamlib or -ldb
 CFLAGS += -DSAMLIB
+SAMLIB ?= -lsamlib
+DB ?= -ldb
 
 all: rtf learnem rtfsort rtfdbdump
 
 rtf: rtf.c
-	$(CC) $(CFLAGS) -o $@ $+ -lsamlib -ldb
+	$(CC) $(CFLAGS) -o $@ $< $(SAMLIB) $(DB)
 
 rtfdbdump: rtfdbdump.c
-	$(CC) $(CFLAGS) -o $@ $+ -lsamlib -ldb
+	$(CC) $(CFLAGS) -o $@ $< $(SAMLIB) $(DB)
 
 clean:
 	rm -f rtf learnem rtfsort rtfdbdump
