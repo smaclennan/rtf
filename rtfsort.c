@@ -304,7 +304,7 @@ static void blacklist_dump(void)
 		printf("\nBlacklist counts:\n");
 
 		for (bl = bl_list; bl; bl = bl->next)
-			printf("  %-.42s %6d\n", bl->fname, bl->bad);
+			printf("  %-42s %6d\n", bl->fname, bl->bad);
 	}
 }
 
