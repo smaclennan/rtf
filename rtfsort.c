@@ -263,9 +263,17 @@ char *strdate(time_t date)
 
 static struct list *bl_list;
 
-static void blacklist_count(const char *str, char whence)
+static void blacklist_count(char *str, char whence)
 {
 	struct list *bl;
+	char *p;
+
+	if (*str) ++str;
+	if (*str == ' ') ++str;
+	for (p = str; *p && *p != '\n'; ++p)
+		if (isupper(*p))
+			*p = tolower(*p);
+	*p = 0;
 
 	for (bl = bl_list; bl; bl = bl->next)
 		if (strcmp(str, bl->fname) == 0) {
@@ -371,11 +379,7 @@ int main(int argc, char *argv[])
 				default: printf("Invalid learn flags %c\n", learn_flag);
 				}
 			else if (flags[0].val == 'B') {
-				char *p = l.subject;
-				if (*p) ++p;
-				if (*p == ' ') ++p;
-				strtok(p, "\n");
-				blacklist_count(p, flags[1].val);
+				blacklist_count(l.subject, flags[1].val);
 				continue;
 			} else
 				for (i = 0; i < NUM_FLAGS; ++i)
