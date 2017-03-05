@@ -290,13 +290,14 @@ static void blacklist_count(const char *str, char whence)
 
 static void blacklist_dump(void)
 {
-	struct list *bl;
+	if (bl_list) {
+		struct list *bl;
 
-	if (bl_list)
-		printf("Blacklist counts:\n");
+		printf("\nBlacklist counts:\n");
 
-	for (bl = bl_list; bl; bl = bl->next)
-		printf("  %-.42s %6d\n", bl->fname, bl->bad);
+		for (bl = bl_list; bl; bl = bl->next)
+			printf("  %-.42s %6d\n", bl->fname, bl->bad);
+	}
 }
 
 static struct flag {
@@ -369,9 +370,14 @@ int main(int argc, char *argv[])
 					continue;
 				default: printf("Invalid learn flags %c\n", learn_flag);
 				}
-			else if (flags[0].val == 'B')
-				blacklist_count(l.subject, flags[1].val);
-			else
+			else if (flags[0].val == 'B') {
+				char *p = l.subject;
+				if (*p) ++p;
+				if (*p == ' ') ++p;
+				strtok(p, "\n");
+				blacklist_count(p, flags[1].val);
+				continue;
+			} else
 				for (i = 0; i < NUM_FLAGS; ++i)
 					if (flags[i].flag & IS_SPAM)
 						/* Spam is special */
