@@ -9,4 +9,4 @@ rtf: rtf.c
 	$(CC) $(CFLAGS) -o $@ $<
 
 clean:
-	rm -f rtf learnem rtfsort
+	rm -f rtf learnem rtfsort TAGS
