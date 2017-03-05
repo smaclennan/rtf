@@ -261,6 +261,44 @@ char *strdate(time_t date)
     return str;
 }
 
+static struct list *bl_list;
+
+static void blacklist_count(const char *str, char whence)
+{
+	struct list *bl;
+
+	for (bl = bl_list; bl; bl = bl->next)
+		if (strcmp(str, bl->fname) == 0) {
+			++bl->bad;
+			return;
+		}
+
+	bl = calloc(1, sizeof(struct list));
+	if (!bl)
+		return;
+
+	bl->fname = strdup(str);
+	if (!bl->fname) {
+		free(bl);
+		return;
+	}
+
+	bl->bad = 1;
+	bl->next = bl_list;
+	bl_list = bl;
+}
+
+static void blacklist_dump(void)
+{
+	struct list *bl;
+
+	if (bl_list)
+		printf("Blacklist counts:\n");
+
+	for (bl = bl_list; bl; bl = bl->next)
+		printf("  %-.42s %6d\n", bl->fname, bl->bad);
+}
+
 static struct flag {
 	unsigned flag;
 	unsigned set;
@@ -331,6 +369,8 @@ int main(int argc, char *argv[])
 					continue;
 				default: printf("Invalid learn flags %c\n", learn_flag);
 				}
+			else if (flags[0].val == 'B')
+				blacklist_count(l.subject, flags[1].val);
 			else
 				for (i = 0; i < NUM_FLAGS; ++i)
 					if (flags[i].flag & IS_SPAM)
@@ -392,6 +432,8 @@ int main(int argc, char *argv[])
 
 	printf("Spam was %.0f%% of all messages\n",
 		   (double)actual_spam * 100.0 / (double)sc.total);
+
+	blacklist_dump();
 
 	return 0;
 }

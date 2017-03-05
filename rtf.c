@@ -70,7 +70,6 @@ static const char *logfile;
 static const char *home;
 static char *subject = "NONE";
 static char action = '?';
-static char *dbname;
 
 /* For dry_run you probably want file mode too. */
 static int dry_run;
@@ -94,6 +93,9 @@ static struct entry *melist;
 static struct entry *whitelist;
 static struct entry *blacklist;
 static struct entry *ignorelist;
+
+static struct entry *saw_bl[2];
+static int add_blacklist;
 
 static char buff[8096];
 
@@ -206,6 +208,15 @@ static void logit(void)
 			OUT(IS_HAM, 'H'), OUT(IS_IGNORED, 'I'), spam,
 			OUT(FROM_ME, 'f'), OUT(BOGO_SPAM, 'B'), action, p);
 
+	if (add_blacklist) {
+		int i;
+
+		for (i = 0; i < 2; ++i)
+			if (saw_bl[i])
+				fprintf(fp, "%-20s B%c-------- %c %.42s\n", tmp_file,
+						i ? 'S' : 'F', action, saw_bl[i]->str);
+	}
+
 	if (ferror(fp))
 		syslog(LOG_ERR, "%s: write error", logfile);
 
@@ -230,58 +241,9 @@ oom:
 	syslog(LOG_WARNING, "Out of memory.");
 }
 
-/* For some reason libdb could not open the db file when run from
- * .qmail. Switch to a trivial text file.
- */
-static void blacklist_count(struct entry *e)
+static void blacklist_count(struct entry *e, int index)
 {
-	if (dbname) {
-		FILE *in, *out;
-		char tmpname[128], line[128];
-		int len, matched = 0;
-
-		snprintf(tmpname, sizeof(tmpname), "%s.%d", dbname, getpid());
-		if (strcmp(tmpname, dbname) == 0) {
-			syslog(LOG_WARNING, "dbname too long (%ld)\n", strlen(dbname));
-			return;
-		}
-
-		if (!(out = fopen(tmpname, "w"))) {
-			syslog(LOG_WARNING, "Unable to create %s\n", tmpname);
-			return;
-		}
-		if (!(in = fopen(dbname, "r"))) {
-			if (errno == ENOENT) {
-				syslog(LOG_INFO, "Creating db %s\n", dbname);
-				goto outit;
-			}
-
-			fclose(out);
-			syslog(LOG_WARNING, "Unable to open %s\n", dbname);
-			return;
-		}
-
-		flock(fileno(in), LOCK_EX);
-
-		len = strlen(e->str);
-		while (fgets(line, sizeof(line), in)) {
-			if (strncmp(line, e->str, len) == 0) {
-				long count = strtol(line + len, NULL, 10);
-				fprintf(out, "%s %ld\n", e->str, ++count);
-				matched = 1;
-			} else
-				fputs(line, out);
-		}
-
-	outit:
-		if (!matched)
-			fprintf(out, "%s 1\n", e->str);
-
-		if (in)  fclose(in);
-		if (out) fclose(out);
-
-		rename(tmpname, dbname);
-	}
+	saw_bl[index] = e;
 }
 
 static int read_config(void)
@@ -462,7 +424,7 @@ static void filter(void)
 				flags |= IS_IGNORED;
 			if ((e = list_filter(buff, blacklist))) {
 				flags |= IS_SPAM;
-				blacklist_count(e);
+				blacklist_count(e, 0);
 			}
 			if (list_filter(buff, melist))
 				flags |= FROM_ME;
@@ -473,7 +435,7 @@ static void filter(void)
 				subject = "NOMEM";
 			if ((e = list_filter(buff, blacklist))) {
 				flags |= IS_SPAM;
-				blacklist_count(e);
+				blacklist_count(e, 1);
 			}
 		} else if (strncmp(buff, "Date:", 5) == 0)
 			flags |= SAW_DATE;
@@ -558,11 +520,11 @@ static int setup_file(const char *fname)
 int main(int argc, char *argv[])
 {
 	int c, rc;
-	while ((c = getopt(argc, argv, "abc:dl:nF:T")) != EOF)
+	while ((c = getopt(argc, argv, "abcdl:nF:T")) != EOF)
 		switch (c) {
 		case 'a': ++drop_apps; break;
 		case 'b': run_bogo = 1; break;
-		case 'c': dbname = optarg; break;
+		case 'c': add_blacklist = 1; break;
 		case 'd': run_drop = 1; break;
 		case 'l': logfile = optarg; break;
 		case 'n': dry_run = 1; break;
