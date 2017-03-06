@@ -5,8 +5,5 @@ CFLAGS += -Wall $(D:1=-g)
 
 all: rtf learnem rtfsort
 
-rtf: rtf.c
-	$(CC) $(CFLAGS) -o $@ $<
-
 clean:
 	rm -f rtf learnem rtfsort TAGS
