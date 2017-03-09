@@ -244,7 +244,7 @@ static void set_max_age(const char *days)
 
 int main(int argc, char *argv[])
 {
-	int do_delete = 0;
+	int do_delete = 0, foreground = 0;
 
 	char *home = getenv("HOME");
 	if (!home) {
@@ -253,9 +253,10 @@ int main(int argc, char *argv[])
 	}
 
 	int c;
-	while ((c = getopt(argc, argv, "d:l:")) != EOF)
+	while ((c = getopt(argc, argv, "d:fl:")) != EOF)
 		switch (c) {
 		case 'd': do_delete = 1; set_max_age(optarg); break;
+		case 'f': foreground = 1; break;
 		case 'l': logfile = optarg; break;
 		default: puts("Sorry!"); exit(1);
 		}
@@ -265,6 +266,9 @@ int main(int argc, char *argv[])
 	snprintf(learn_dir, sizeof(learn_dir), "%s/Maildir/%s/cur", home, LEARN_DIR);
 	snprintf(ham_dir, sizeof(ham_dir), "%s/Maildir/%s/cur", home, HAM_DIR);
 	snprintf(ignore_dir, sizeof(ham_dir), "%s/Maildir/%s/cur", home, IGNORE_DIR);
+
+	if (!foreground && daemon(0, 0))
+		syslog(LOG_WARNING, "Unable to daemonize\n");
 
 #ifdef __linux__
 #define MAX_FDS 2
