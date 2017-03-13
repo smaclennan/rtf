@@ -5,6 +5,7 @@
 static struct list {
 	const char *fname;
 	int bad;
+	int bogo; /* blacklist count */
 	struct list *next;
 } *ham;
 
@@ -263,7 +264,7 @@ char *strdate(time_t date)
 
 static struct list *bl_list;
 
-static void blacklist_count(char *str, char whence)
+static void blacklist_count(char *str, char whence, char bogo)
 {
 	struct list *bl;
 	char *p;
@@ -276,10 +277,8 @@ static void blacklist_count(char *str, char whence)
 	*p = 0;
 
 	for (bl = bl_list; bl; bl = bl->next)
-		if (strcmp(str, bl->fname) == 0) {
-			++bl->bad;
-			return;
-		}
+		if (strcmp(str, bl->fname) == 0)
+			goto count;
 
 	bl = calloc(1, sizeof(struct list));
 	if (!bl)
@@ -291,9 +290,13 @@ static void blacklist_count(char *str, char whence)
 		return;
 	}
 
-	bl->bad = 1;
 	bl->next = bl_list;
 	bl_list = bl;
+
+count:
+	++bl->bad;
+	if (bogo == 'B')
+		++bl->bogo;
 }
 
 static void blacklist_dump(void)
@@ -304,7 +307,7 @@ static void blacklist_dump(void)
 		printf("\nBlacklist counts:\n");
 
 		for (bl = bl_list; bl; bl = bl->next)
-			printf("  %-42s %6d\n", bl->fname, bl->bad);
+			printf("  %-42s %6d  %6d\n", bl->fname, bl->bad, bl->bogo);
 	}
 }
 
@@ -379,7 +382,7 @@ int main(int argc, char *argv[])
 				default: printf("Invalid learn flags %c\n", learn_flag);
 				}
 			else if (flags[0].val == 'B') {
-				blacklist_count(l.subject, flags[1].val);
+				blacklist_count(l.subject, flags[1].val, flags[7].val);
 				continue;
 			} else
 				for (i = 0; i < NUM_FLAGS; ++i)
