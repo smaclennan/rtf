@@ -1,6 +1,7 @@
 #include "rtf.h"
 #include <assert.h>
 #include <limits.h>
+#include <pwd.h>
 
 static struct list {
 	const char *fname;
@@ -12,6 +13,8 @@ static struct list {
 static int verbose;
 static time_t start = (time_t)-1, end = (time_t)-1;
 static time_t min_date = INT_MAX, max_date;
+
+static struct passwd *user;
 
 struct log_struct {
 	char fname[80];
@@ -264,6 +267,26 @@ char *strdate(time_t date)
 
 static struct list *bl_list;
 
+static struct list *add_blacklist(char *str)
+{
+	struct list *bl = calloc(1, sizeof(struct list));
+	if (!bl)
+		return NULL;
+
+	bl->fname = strdup(str);
+	if (!bl->fname) {
+		free(bl);
+		return NULL;
+	}
+
+	while (*str)
+		*str++ = tolower(*str);
+
+	bl->next = bl_list;
+	bl_list = bl;
+	return bl;
+}
+
 static void blacklist_count(char *str, char whence, char bogo)
 {
 	struct list *bl;
@@ -280,18 +303,12 @@ static void blacklist_count(char *str, char whence, char bogo)
 		if (strcmp(str, bl->fname) == 0)
 			goto count;
 
-	bl = calloc(1, sizeof(struct list));
+	if (user)
+		printf("Hmmm... '%s' not found\n", str); // SAM DBG
+
+	bl = add_blacklist(str);
 	if (!bl)
 		return;
-
-	bl->fname = strdup(str);
-	if (!bl->fname) {
-		free(bl);
-		return;
-	}
-
-	bl->next = bl_list;
-	bl_list = bl;
 
 count:
 	++bl->bad;
@@ -309,6 +326,53 @@ static void blacklist_dump(void)
 		for (bl = bl_list; bl; bl = bl->next)
 			printf("  %-42s %6d  %6d\n", bl->fname, bl->bad, bl->bogo);
 	}
+}
+
+static void read_blacklist(const char *dir)
+{
+	char line[128];
+	FILE *fp;
+	int found = 0;
+
+	snprintf(line, sizeof(line), "%s/.rtf", dir);
+	if (!(fp = fopen(line, "r"))) {
+		printf("Warning: Unable to open %s\n", line);
+		return;
+	}
+
+	while (!found && fgets(line, sizeof(line), fp))
+		found = strncmp(line, "[blacklist]", 11) == 0;
+
+	if (found)
+		while (fgets(line, sizeof(line), fp)) {
+			if (*line == '[')
+				break;
+			strtok(line, "\r\n");
+			if (!*line || *line == '#')
+				continue;
+			add_blacklist(line);
+		}
+
+	fclose(fp);
+}
+
+static void get_user(const char *user_name)
+{
+	char *p;
+
+	user = getpwnam(user_name);
+	if (!user) {
+		perror(user_name);
+		exit(1);
+	}
+
+	if ((p = strchr(user->pw_gecos, ',')))
+		*p = 0;
+
+	if (*user->pw_gecos == 0)
+		user->pw_gecos = user->pw_name;
+
+	read_blacklist(user->pw_dir);
 }
 
 static struct flag {
@@ -336,13 +400,16 @@ int main(int argc, char *argv[])
 
 	assert(NUM_FLAGS == 8);
 
-	while ((c = getopt(argc, argv, "cd:v")) != EOF)
+	while ((c = getopt(argc, argv, "cd:u:v")) != EOF)
 		switch (c) {
 		case 'c':
 			do_cleanup = 1;
 			break;
 		case 'd':
 			set_dates(optarg);
+			break;
+		case 'u':
+			get_user(optarg);
 			break;
 		case 'v':
 			++verbose;
@@ -411,8 +478,12 @@ int main(int argc, char *argv[])
 			printf("PROBS: %s", line);
 	}
 
-	printf("Summary %s to %s\n", strdate(min_date), strdate(max_date));
-	
+	if (user)
+		printf("Summary %s to %s for %s\n",
+			   strdate(min_date), strdate(max_date), user->pw_gecos);
+	else
+		printf("Summary %s to %s\n", strdate(min_date), strdate(max_date));
+
 	if (sc.not_me + sc.ignored + sc.real + sc.learned + sc.spam != sc.total)
 		printf("Problems with total\n");
 
