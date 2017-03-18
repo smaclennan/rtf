@@ -279,9 +279,9 @@ static struct black *add_blacklist(char *str)
 	assert(bl->str = strdup(str));
 	assert(bl->match = strdup(str));
 
-	char *p = bl->match;
-	while (*p)
-		*p++ = tolower(*p);
+	char *p;
+	for (p = bl->match; *p; ++p)
+		*p = tolower(*p);
 
 	if (bl_tail)
 		bl_tail->next = bl;
@@ -352,7 +352,7 @@ static void read_blacklist(const char *dir)
 			if (*line == '[')
 				break;
 			p = strtok(line, "\r\n");
-			if (!*p || *p == '#')
+			if (!p || !*p || *p == '#')
 				continue;
 			add_blacklist(p);
 		}
