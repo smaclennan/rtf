@@ -6,7 +6,6 @@
 static struct list {
 	const char *fname;
 	int bad;
-	int bogo; /* blacklist count */
 	struct list *next;
 } *ham;
 
@@ -265,31 +264,44 @@ char *strdate(time_t date)
     return str;
 }
 
-static struct list *bl_list;
+static struct black {
+	char *str;
+	char *match; /* lowercase */
+	int count;
+	int bogo;
+	struct black *next;
+} *bl_list, *bl_tail;
 
-static struct list *add_blacklist(char *str)
+static struct black *add_blacklist(char *str)
 {
-	struct list *bl = calloc(1, sizeof(struct list));
+	struct black *bl = calloc(1, sizeof(struct black));
 	if (!bl)
 		return NULL;
 
-	bl->fname = strdup(str);
-	if (!bl->fname) {
+	bl->str = strdup(str);
+
+	while (*str)
+		*str++ = tolower(*str);
+	bl->match = strdup(str);
+
+	if (!bl->str || !bl->match) {
+		if (bl->str) free(bl->str);
+		if (bl->match) free(bl->match);
 		free(bl);
 		return NULL;
 	}
 
-	while (*str)
-		*str++ = tolower(*str);
-
-	bl->next = bl_list;
-	bl_list = bl;
+	if (bl_tail)
+		bl_tail->next = bl;
+	else
+		bl_list = bl;
+	bl_tail = bl;
 	return bl;
 }
 
 static void blacklist_count(char *str, char whence, char bogo)
 {
-	struct list *bl;
+	struct black *bl;
 	char *p;
 
 	if (*str) ++str;
@@ -300,7 +312,7 @@ static void blacklist_count(char *str, char whence, char bogo)
 	*p = 0;
 
 	for (bl = bl_list; bl; bl = bl->next)
-		if (strcmp(str, bl->fname) == 0)
+		if (strcmp(str, bl->match) == 0)
 			goto count;
 
 	if (user)
@@ -311,7 +323,7 @@ static void blacklist_count(char *str, char whence, char bogo)
 		return;
 
 count:
-	++bl->bad;
+	++bl->count;
 	if (bogo == 'B')
 		++bl->bogo;
 }
@@ -319,18 +331,18 @@ count:
 static void blacklist_dump(void)
 {
 	if (bl_list) {
-		struct list *bl;
+		struct black *bl;
 
 		printf("\nBlacklist counts:\n");
 
 		for (bl = bl_list; bl; bl = bl->next)
-			printf("  %-42s %6d  %6d\n", bl->fname, bl->bad, bl->bogo);
+			printf("  %-42s %6d  %6d\n", bl->str, bl->count, bl->bogo);
 	}
 }
 
 static void read_blacklist(const char *dir)
 {
-	char line[128];
+	char line[128], *p;
 	FILE *fp;
 	int found = 0;
 
@@ -347,10 +359,10 @@ static void read_blacklist(const char *dir)
 		while (fgets(line, sizeof(line), fp)) {
 			if (*line == '[')
 				break;
-			strtok(line, "\r\n");
-			if (!*line || *line == '#')
+			p = strtok(line, "\r\n");
+			if (!*p || *p == '#')
 				continue;
-			add_blacklist(line);
+			add_blacklist(p);
 		}
 
 	fclose(fp);
