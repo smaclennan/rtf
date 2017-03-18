@@ -275,21 +275,13 @@ static struct black {
 static struct black *add_blacklist(char *str)
 {
 	struct black *bl = calloc(1, sizeof(struct black));
-	if (!bl)
-		return NULL;
+	assert(bl);
+	assert(bl->str = strdup(str));
+	assert(bl->match = strdup(str));
 
-	bl->str = strdup(str);
-
-	while (*str)
-		*str++ = tolower(*str);
-	bl->match = strdup(str);
-
-	if (!bl->str || !bl->match) {
-		if (bl->str) free(bl->str);
-		if (bl->match) free(bl->match);
-		free(bl);
-		return NULL;
-	}
+	char *p = bl->match;
+	while (*p)
+		*p++ = tolower(*p);
 
 	if (bl_tail)
 		bl_tail->next = bl;
