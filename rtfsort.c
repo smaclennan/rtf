@@ -309,7 +309,7 @@ static void blacklist_count(char *str, char whence, char bogo)
 			goto count;
 
 	if (user)
-		printf("Hmmm... '%s' not found\n", str); // SAM DBG
+		fprintf(stderr, "Hmmm... '%s' not found\n", str); // SAM DBG
 
 	bl = add_blacklist(str);
 	if (!bl)
