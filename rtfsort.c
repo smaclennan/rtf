@@ -37,10 +37,8 @@ struct sort_counts {
 	unsigned drop;
 	unsigned ham;
 	unsigned spam_action;
-	unsigned bogo;
 	unsigned bogo_total;
 	unsigned ignore_action;
-	unsigned learned_ham;
 	unsigned learned_spam;
 	unsigned def; /* default */
 
@@ -200,7 +198,9 @@ static void handle_actions(struct log_struct *l, struct sort_counts *sc)
 		return;
 	}
 	if (l->flags & LEARN_HAM) {
-		++sc->learned_ham;
+		--sc->total; /* don't count learn line */
+		--sc->spam_action;
+		++sc->def;
 		return;
 	}
 
@@ -210,12 +210,10 @@ static void handle_actions(struct log_struct *l, struct sort_counts *sc)
 		++sc->ham;
 	else if (l->flags & SAW_APP)
 		++sc->drop;
-	else if ((l->flags & IS_SPAM) ||
+	else if ((l->flags & IS_SPAM) || (l->flags & BOGO_SPAM) ||
 		(l->flags & SAW_FROM) == 0 || (l->flags & SAW_DATE) == 0 ||
 		(l->flags & FROM_ME) || (l->flags & IS_ME) == 0)
 		++sc->spam_action;
-	else if (l->flags & BOGO_SPAM)
-		++sc->bogo;
 	else
 		++sc->def;
 
@@ -454,6 +452,7 @@ int main(int argc, char *argv[])
 				}
 			else if (flags[0].val == 'B') {
 				blacklist_count(l.subject, flags[1].val, flags[7].val);
+				--sc.total; /* does not count */
 				continue;
 			} else
 				for (i = 0; i < NUM_FLAGS; ++i)
@@ -490,16 +489,19 @@ int main(int argc, char *argv[])
 
 	if (sc.not_me + sc.ignored + sc.real + sc.learned + sc.spam != sc.total)
 		printf("Problems with total\n");
+	if (sc.ignore_action + sc.ham + sc.drop + sc.spam_action + sc.def +
+		sc.learned_spam != sc.total)
+		printf("Problems with action total\n");
 
 	printf("Mail Stats:\n");
 	printf("  Not me %u from me %u ignored %d real %u learned %u spam %u total %u\n",
 		   sc.not_me, sc.from, sc.ignored, sc.real, sc.learned, sc.spam, sc.total);
 
 	printf("Actions:\n");
-	printf("  Ignored %u ham %u drop %u spam %u bogo %u real %u learned %u\n",
-		   sc.ignore_action, sc.ham, sc.drop, sc.spam_action, sc.bogo, sc.def, sc.learned_spam);
+	printf("  Ignored %u ham %u drop %u spam %u real %u learned %u\n",
+		   sc.ignore_action, sc.ham, sc.drop, sc.spam_action, sc.def, sc.learned_spam);
 
-	unsigned actual_spam = sc.spam_action + sc.drop + sc.bogo + sc.learned_spam;
+	unsigned actual_spam = sc.spam_action + sc.drop + sc.learned_spam;
 
 	printf("We caught %.0f%% bogofilter %.0f%% missed %.0f%%.",
 		   (double)(sc.spam_action + sc.drop) * 100.0 / (double)actual_spam,
