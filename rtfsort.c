@@ -270,6 +270,7 @@ static struct black {
 	char *match; /* lowercase */
 	int count;
 	int bogo;
+	int nomatch;
 	struct black *next;
 } *bl_list, *bl_tail;
 
@@ -308,12 +309,12 @@ static void blacklist_count(char *str, char whence, char bogo)
 		if (strcmp(str, bl->match) == 0)
 			goto count;
 
-	if (user)
-		fprintf(stderr, "Hmmm... '%s' not found\n", str); // SAM DBG
-
 	bl = add_blacklist(str);
 	if (!bl)
 		return;
+
+	if (user)
+		bl->nomatch = 1;
 
 count:
 	++bl->count;
@@ -329,7 +330,9 @@ static void blacklist_dump(void)
 		printf("\nBlacklist counts:\n");
 
 		for (bl = bl_list; bl; bl = bl->next)
-			printf("  %-42s %6d  %6d\n", bl->str, bl->count, bl->bogo);
+			printf("  %c%-42s %6d  %6d\n",
+				   bl->nomatch ? '-' : ' ',
+				   bl->str, bl->count, bl->bogo);
 	}
 }
 
