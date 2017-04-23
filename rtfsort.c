@@ -369,12 +369,14 @@ static void raw_dump(struct sort_counts *sc)
 {
 	fprintf(stderr, "total:\t\t%6u\n", sc->total);
 	fprintf(stderr, "actual_spam:\t%6u\n", sc->actual_spam);
+	fprintf(stderr, "\n");
 	fprintf(stderr, "real:\t\t%6u\n", sc->real);
 	fprintf(stderr, "spam:\t\t%6u\n", sc->spam);
 	fprintf(stderr, "learned:\t%6u\n", sc->learned);
 	fprintf(stderr, "not_me:\t\t%6u\n", sc->not_me);
 	fprintf(stderr, "from:\t\t%6u\n", sc->from);
 	fprintf(stderr, "ignored:\t%6u\n", sc->ignored);
+	fprintf(stderr, "\n");
 	fprintf(stderr, "drop:\t\t%6u\n", sc->drop);
 	fprintf(stderr, "ham:\t\t%6u\n", sc->ham);
 	fprintf(stderr, "spam_action:\t%6u\n", sc->spam_action);
@@ -383,6 +385,7 @@ static void raw_dump(struct sort_counts *sc)
 	fprintf(stderr, "ignore_action:\t%6u\n", sc->ignore_action);
 	fprintf(stderr, "learned_spam:\t%6u\n", sc->learned_spam);
 	fprintf(stderr, "def:\t\t%6u\n", sc->def);
+	fprintf(stderr, "\n");
 	fprintf(stderr, "bad_ham:\t%6u\n", sc->bad_ham);
 }
 
