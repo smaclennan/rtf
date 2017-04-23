@@ -24,6 +24,7 @@ struct log_struct {
 struct sort_counts {
 	/* both */
 	unsigned total;
+	unsigned actual_spam;
 
 	/* only sort */
 	unsigned real;
@@ -364,6 +365,27 @@ static void read_blacklist(const char *dir)
 	fclose(fp);
 }
 
+static void raw_dump(struct sort_counts *sc)
+{
+	fprintf(stderr, "total:\t\t%6u\n", sc->total);
+	fprintf(stderr, "actual_spam:\t%6u\n", sc->actual_spam);
+	fprintf(stderr, "real:\t\t%6u\n", sc->real);
+	fprintf(stderr, "spam:\t\t%6u\n", sc->spam);
+	fprintf(stderr, "learned:\t%6u\n", sc->learned);
+	fprintf(stderr, "not_me:\t\t%6u\n", sc->not_me);
+	fprintf(stderr, "from:\t\t%6u\n", sc->from);
+	fprintf(stderr, "ignored:\t%6u\n", sc->ignored);
+	fprintf(stderr, "drop:\t\t%6u\n", sc->drop);
+	fprintf(stderr, "ham:\t\t%6u\n", sc->ham);
+	fprintf(stderr, "spam_action:\t%6u\n", sc->spam_action);
+	fprintf(stderr, "bogo:\t\t%6u\n", sc->bogo);
+	fprintf(stderr, "bogo_total:\t%6u\n", sc->bogo_total);
+	fprintf(stderr, "ignore_action:\t%6u\n", sc->ignore_action);
+	fprintf(stderr, "learned_spam:\t%6u\n", sc->learned_spam);
+	fprintf(stderr, "def:\t\t%6u\n", sc->def);
+	fprintf(stderr, "bad_ham:\t%6u\n", sc->bad_ham);
+}
+
 static void get_user(const char *user_name)
 {
 	char *p;
@@ -402,19 +424,22 @@ static struct flag {
 int main(int argc, char *argv[])
 {
 	char line[80];
-	int i, c, n, do_cleanup = 0;
+	int i, c, n, do_cleanup = 0, dump_raw = 0;
 	struct log_struct l;
 	struct sort_counts sc;
 
 	assert(NUM_FLAGS == 8);
 
-	while ((c = getopt(argc, argv, "cd:u:v")) != EOF)
+	while ((c = getopt(argc, argv, "cd:ru:v")) != EOF)
 		switch (c) {
 		case 'c':
 			do_cleanup = 1;
 			break;
 		case 'd':
 			set_dates(optarg);
+			break;
+		case 'r':
+			dump_raw = 1;
 			break;
 		case 'u':
 			get_user(optarg);
@@ -507,12 +532,12 @@ int main(int argc, char *argv[])
 	printf("  Ignored %u ham %u drop %u spam %u bogo %u real %u learned %u\n",
 		   sc.ignore_action, sc.ham, sc.drop, sc.spam_action, sc.bogo, sc.def, sc.learned_spam);
 
-	unsigned actual_spam = sc.spam_action + sc.drop + sc.bogo + sc.learned_spam;
+	sc.actual_spam = sc.spam_action + sc.drop + sc.bogo + sc.learned_spam;
 
 	printf("We caught %.0f%% bogofilter %.0f%% missed %.0f%%.",
-		   (double)(sc.spam_action + sc.drop) * 100.0 / (double)actual_spam,
-		   (double)sc.bogo_total * 100.0 / (double)actual_spam,
-		   (double)sc.learned_spam * 100.0 / (double)actual_spam);
+		   (double)(sc.spam_action + sc.drop) * 100.0 / (double)sc.actual_spam,
+		   (double)sc.bogo_total * 100.0 / (double)sc.actual_spam,
+		   (double)sc.learned_spam * 100.0 / (double)sc.actual_spam);
 	if (sc.bad_ham) {
 		printf(" Bad ham %u.", sc.bad_ham);
 
@@ -527,9 +552,12 @@ int main(int argc, char *argv[])
 	putchar('\n');
 
 	printf("Spam was %.0f%% of all messages\n",
-		   (double)actual_spam * 100.0 / (double)sc.total);
+		   (double)sc.actual_spam * 100.0 / (double)sc.total);
 
 	blacklist_dump();
+
+	if (dump_raw)
+		raw_dump(&sc);
 
 	return 0;
 }
