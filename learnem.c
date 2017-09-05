@@ -84,7 +84,7 @@ static void handle_spam(void)
 	while ((ent = readdir(dir))) {
 		if (*ent->d_name == '.') continue;
 
-		char old[MY_PATH_MAX], new[MY_PATH_MAX];
+		char old[MY_PATH_MAX], new[MY_PATH_MAX], *p;
 		snprintf(old, sizeof(old), "%s/%s", learn_dir, ent->d_name);
 		snprintf(cmd, sizeof(cmd), "/usr/bin/bogofilter -Ns -d %s -B '%s'", config_dir, old);
 		int rc = system(cmd);
@@ -94,7 +94,11 @@ static void handle_spam(void)
 		}
 
 		/* Move to spam and mark read */
-		snprintf(new, sizeof(new) - 3, "%s/%s,S", spam_dir, ent->d_name);
+		p = ent->d_name + strlen(ent->d_name) - 1;
+		if (*p == ',')
+			snprintf(new, sizeof(new) - 3, "%s/%sS", spam_dir, ent->d_name);
+		else
+			snprintf(new, sizeof(new) - 3, "%s/%s,S", spam_dir, ent->d_name);
 		if (rename(old, new))
 			syslog(LOG_ERR, "rename(%s, %s) failed", old, new);
 		else
