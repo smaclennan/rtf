@@ -90,6 +90,7 @@ struct entry {
 };
 
 static struct entry *melist;
+static struct entry *fromlist;
 static struct entry *whitelist;
 static struct entry *blacklist;
 static struct entry *ignorelist;
@@ -277,6 +278,8 @@ static int read_config(void)
 				head = &ignorelist;
 			else if (strcmp(line, "[me]") == 0)
 				head = &melist;
+			else if (strcmp(line, "[fromlist]") == 0)
+				head = &fromlist;
 			else {
 				syslog(LOG_INFO, "Unexpected: %s\n", line);
 				head = NULL;
@@ -427,7 +430,7 @@ static void filter(void)
 				flags |= IS_SPAM;
 				blacklist_count(e, 0);
 			}
-			if (list_filter(buff, melist))
+			if (list_filter(buff, fromlist))
 				flags |= FROM_ME;
 		} else if (strncmp(buff, "Subject:", 8) == 0) {
 			if ((subject = strdup(buff)))
@@ -475,8 +478,8 @@ static void filter(void)
 		run_bogofilter(tmp_path, "-n");
 		ham();
 	}
-	/* Rule 3, 4, 6 */
-	if ((flags & (IS_SPAM | FROM_ME | BOGO_SPAM)) ||
+	/* Rule 3, 6 */
+	if ((flags & (IS_SPAM | BOGO_SPAM)) ||
 		/* Rule 5 */
 		(flags & SAW_FROM) == 0 || (flags & SAW_DATE) == 0 ||
 		/* Rule 7 */
@@ -485,6 +488,12 @@ static void filter(void)
 		action = 'S';
 		run_bogofilter(tmp_path, "-s");
 		spam();
+	}
+	/* Rule 4 */
+	if (flags & FROM_ME) {
+		action = 'S';
+		run_bogofilter(tmp_path, "-s");
+		drop(); // SAM DBG for now I want to watch these
 	}
 	/* Rule 8 */
 	if (drop_apps && (flags & SAW_APP)) {
