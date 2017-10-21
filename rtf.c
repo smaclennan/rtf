@@ -478,8 +478,8 @@ static void filter(void)
 		run_bogofilter(tmp_path, "-n");
 		ham();
 	}
-	/* Rule 3, 6 */
-	if ((flags & (IS_SPAM | BOGO_SPAM)) ||
+	/* Rule 3, 4, 6 */
+	if ((flags & (IS_SPAM | BOGO_SPAM | FROM_ME)) ||
 		/* Rule 5 */
 		(flags & SAW_FROM) == 0 || (flags & SAW_DATE) == 0 ||
 		/* Rule 7 */
@@ -488,12 +488,6 @@ static void filter(void)
 		action = 'S';
 		run_bogofilter(tmp_path, "-s");
 		spam();
-	}
-	/* Rule 4 */
-	if (flags & FROM_ME) {
-		action = 'S';
-		run_bogofilter(tmp_path, "-s");
-		drop(); // SAM DBG for now I want to watch these
 	}
 	/* Rule 8 */
 	if (drop_apps && (flags & SAW_APP)) {
