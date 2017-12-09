@@ -66,10 +66,12 @@ static int run_bogo;
 static int train_bogo;
 static int run_drop;
 static int drop_apps;
+static int forward;
 static const char *logfile;
 static const char *home;
 static char *subject = "NONE";
 static char action = '?';
+static char *sender;
 
 /* For dry_run you probably want file mode too. */
 static int dry_run;
@@ -94,6 +96,7 @@ static struct entry *fromlist;
 static struct entry *whitelist;
 static struct entry *blacklist;
 static struct entry *ignorelist;
+static struct entry *forwardlist;
 
 static struct entry *saw_bl[2];
 static int add_blacklist;
@@ -106,6 +109,8 @@ static char buff[8096];
 #define PATH_SIZE 144
 
 static char tmp_file[84], tmp_path[PATH_SIZE];
+
+#include "forward.c" /* keep it separate for now */
 
 /* Should be NFS safe iff all hostnames are unique. */
 static int create_tmp_file(void)
@@ -241,6 +246,7 @@ static void add_entry(struct entry **head, const char *str)
 
 oom:
 	syslog(LOG_WARNING, "Out of memory.");
+	exit(0);
 }
 
 static void blacklist_count(struct entry *e, int index)
@@ -280,6 +286,8 @@ static int read_config(void)
 				head = &melist;
 			else if (strcmp(line, "[fromlist]") == 0)
 				head = &fromlist;
+			else if (strcmp(line, "[forward]") == 0)
+				head = &forwardlist;
 			else {
 				syslog(LOG_INFO, "Unexpected: %s\n", line);
 				head = NULL;
@@ -320,6 +328,14 @@ static void ham(void)
 	if (!file_mode) {
 		char path[PATH_SIZE];
 		snprintf(path, sizeof(path), "%s/Maildir/new/%s", home, tmp_file);
+
+		/* We technically should forward after rename... but it is
+		 * racy to forward the "real" message but safe with the tmp
+		 * message.
+		 */
+		if (forward && !dry_run)
+			do_forward(tmp_path);
+
 		_safe_rename(path);
 		exit(99); /* don't continue - we handled it */
 	}
@@ -421,6 +437,7 @@ static void filter(void)
 			if (list_filter(buff, melist))
 				flags |= IS_ME;
 		} else if (strncmp(buff, "From:", 5) == 0) {
+			syslog(LOG_INFO, "%s SENDER %s", buff, sender); // SAM DBG
 			flags |= SAW_FROM;
 			if (list_filter(buff, whitelist))
 				flags |= IS_HAM;
@@ -524,12 +541,13 @@ static int setup_file(const char *fname)
 int main(int argc, char *argv[])
 {
 	int c, rc;
-	while ((c = getopt(argc, argv, "abcdl:nF:T")) != EOF)
+	while ((c = getopt(argc, argv, "abcdfl:nF:T")) != EOF)
 		switch (c) {
 		case 'a': ++drop_apps; break;
 		case 'b': run_bogo = 1; break;
 		case 'c': add_blacklist = 1; break;
 		case 'd': run_drop = 1; break;
+		case 'f': forward = 1; break;
 		case 'l': logfile = optarg; break;
 		case 'n': dry_run = 1; break;
 		case 'F': file_mode = optarg; break;
@@ -540,6 +558,12 @@ int main(int argc, char *argv[])
 	if (!home) {
 		syslog(LOG_WARNING, "You are homeless!");
 		return 0; /* continue */
+	}
+
+	sender = getenv("SENDER");
+	if (!sender) {
+		syslog(LOG_ERR, "Email with no sender!");
+		return 0;
 	}
 
 	read_config();

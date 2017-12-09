@@ -7,6 +7,9 @@ VERSION=1.0
 
 all: rtf learnem rtfsort
 
+rtf: rtf.c
+	$(CC) $(CFLAGS) -o $@ $< -lcurl
+
 tarball:
 	rm -rf rtf-$(VERSION)
 	mkdir rtf-$(VERSION)
