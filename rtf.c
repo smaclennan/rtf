@@ -313,8 +313,6 @@ static void _safe_rename(const char *path)
 		unlink(tmp_path);
 		exit(0); /* continue */
 	}
-
-	exit(99); /* don't continue - we handled it */
 }
 
 static void ham(void)
@@ -323,6 +321,7 @@ static void ham(void)
 		char path[PATH_SIZE];
 		snprintf(path, sizeof(path), "%s/Maildir/new/%s", home, tmp_file);
 		_safe_rename(path);
+		exit(99); /* don't continue - we handled it */
 	}
 }
 
@@ -331,6 +330,7 @@ static void safe_rename(const char *subdir)
 	char path[PATH_SIZE];
 	snprintf(path, sizeof(path), "%s/Maildir/%s/cur/%s:2,S", home, subdir, tmp_file);
 	_safe_rename(path);
+	exit(99); /* don't continue - we handled it */
 }
 
 static inline void spam(void) { safe_rename(SPAM_DIR); }
