@@ -12,7 +12,7 @@ struct user_data {
 static size_t read_callback(char *output, size_t size, size_t nmemb, void *datap)
 {
 	struct user_data *data = datap;
-	char buffer[4096]; /* SAM HACK */
+	char buffer[16 * 1024]; /* SAM HACK */
 
 	syslog(LOG_INFO, "CB: %lu %lu", size, nmemb); // SAM DBG
 
