@@ -98,7 +98,7 @@ static struct entry *blacklist;
 static struct entry *ignorelist;
 static struct entry *forwardlist;
 
-static struct entry *saw_bl[2];
+static const struct entry *saw_bl[2];
 static int add_blacklist;
 
 static char buff[8096];
@@ -249,7 +249,7 @@ oom:
 	exit(0);
 }
 
-static void blacklist_count(struct entry *e, int index)
+static void blacklist_count(const struct entry *e, int index)
 {
 	saw_bl[index] = e;
 }
@@ -355,7 +355,7 @@ static inline void ignore(void) { safe_rename(IGNORE_DIR); }
 
 static inline void drop(void) { safe_rename(DROP_DIR); }
 
-static struct entry *list_filter(char *line, struct entry *head)
+static const struct entry *list_filter(const char *line, struct entry * const head)
 {
 	struct entry *e;
 
@@ -415,9 +415,9 @@ static int check_type(const char *type)
 	return 0;
 }
 
-static inline void filter_from(char *from)
+static inline void filter_from(const char *from)
 {
-	struct entry *e;
+	const struct entry *e;
 
 	if (list_filter(from, whitelist))
 		flags |= IS_HAM;
@@ -433,7 +433,7 @@ static inline void filter_from(char *from)
 
 static void filter(void)
 {
-	struct entry *e;
+	const struct entry *e;
 	FILE *fp = fopen(tmp_path, "r");
 	if (!fp) {
 		syslog(LOG_WARNING, "%s: %m", tmp_path);
