@@ -7,8 +7,8 @@ VERSION=1.0
 
 all: rtf learnem rtfsort
 
-rtf: rtf.c forward.c
-	$(CC) $(CFLAGS) -o $@ rtf.c -lcurl
+rtf: rtf.c
+	$(CC) $(CFLAGS) -o $@ rtf.c
 
 tarball:
 	rm -rf rtf-$(VERSION)

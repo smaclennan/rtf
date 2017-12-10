@@ -110,7 +110,8 @@ static char buff[8096];
 
 static char tmp_file[84], tmp_path[PATH_SIZE];
 
-#include "forward.c" /* keep it separate for now */
+// SAM not yet #include "forward.c" /* keep it separate for now */
+#define do_forward(f)
 
 /* Should be NFS safe iff all hostnames are unique. */
 static int create_tmp_file(void)
