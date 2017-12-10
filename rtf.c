@@ -428,15 +428,14 @@ static void filter(void)
 	while (fgets(buff, sizeof(buff), fp)) {
 		if (*buff == '\n')
 			break; /* end of buff */
-		else if (strncmp(buff, "To:", 3) == 0 ||
-				 strncmp(buff, "Cc:", 3) == 0 ||
-				 strncmp(buff, "CC:", 3) == 0 ||
-				 strncmp(buff, "Bcc:", 4) == 0) {
+		else if (strncasecmp(buff, "To:", 3) == 0 ||
+				 strncasecmp(buff, "Cc:", 3) == 0 ||
+				 strncasecmp(buff, "Bcc:", 4) == 0) {
 			if (list_filter(buff, whitelist))
 				flags |= IS_HAM;
 			if (list_filter(buff, melist))
 				flags |= IS_ME;
-		} else if (strncmp(buff, "From:", 5) == 0) {
+		} else if (strncasecmp(buff, "From:", 5) == 0) {
 			syslog(LOG_INFO, "%s SENDER %s", buff, sender); // SAM DBG
 			flags |= SAW_FROM;
 			if (list_filter(buff, whitelist))
@@ -449,7 +448,7 @@ static void filter(void)
 			}
 			if (list_filter(buff, fromlist))
 				flags |= FROM_ME;
-		} else if (strncmp(buff, "Subject:", 8) == 0) {
+		} else if (strncasecmp(buff, "Subject:", 8) == 0) {
 			if ((subject = strdup(buff)))
 				strtok(subject, "\r\n");
 			else
@@ -458,7 +457,7 @@ static void filter(void)
 				flags |= IS_SPAM;
 				blacklist_count(e, 1);
 			}
-		} else if (strncmp(buff, "Date:", 5) == 0)
+		} else if (strncasecmp(buff, "Date:", 5) == 0)
 			flags |= SAW_DATE;
 		else if (strncasecmp(buff, "Content-Type:", 13) == 0) {
 			if (check_type(buff + 13))
