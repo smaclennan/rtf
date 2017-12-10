@@ -415,6 +415,22 @@ static int check_type(const char *type)
 	return 0;
 }
 
+static inline void filter_from(char *from)
+{
+	struct entry *e;
+
+	if (list_filter(from, whitelist))
+		flags |= IS_HAM;
+	if (list_filter(from, ignorelist))
+		flags |= IS_IGNORED;
+	if ((e = list_filter(from, blacklist))) {
+		flags |= IS_SPAM;
+		blacklist_count(e, 0);
+	}
+	if (list_filter(from, fromlist))
+		flags |= FROM_ME;
+}
+
 static void filter(void)
 {
 	struct entry *e;
@@ -424,6 +440,11 @@ static void filter(void)
 		unlink(tmp_path);
 		exit(0);
 	}
+
+	/* Also filter sender. This is mainly for mailing lists but can
+	 * also catch people who fake the from.
+	 */
+	filter_from(sender);
 
 	while (fgets(buff, sizeof(buff), fp)) {
 		if (*buff == '\n')
@@ -436,18 +457,8 @@ static void filter(void)
 			if (list_filter(buff, melist))
 				flags |= IS_ME;
 		} else if (strncasecmp(buff, "From:", 5) == 0) {
-			syslog(LOG_INFO, "%s SENDER %s", buff, sender); // SAM DBG
 			flags |= SAW_FROM;
-			if (list_filter(buff, whitelist))
-				flags |= IS_HAM;
-			if (list_filter(buff, ignorelist))
-				flags |= IS_IGNORED;
-			if ((e = list_filter(buff, blacklist))) {
-				flags |= IS_SPAM;
-				blacklist_count(e, 0);
-			}
-			if (list_filter(buff, fromlist))
-				flags |= FROM_ME;
+			filter_from(buff);
 		} else if (strncasecmp(buff, "Subject:", 8) == 0) {
 			if ((subject = strdup(buff)))
 				strtok(subject, "\r\n");
