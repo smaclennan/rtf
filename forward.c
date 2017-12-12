@@ -44,6 +44,7 @@ static void do_forward(const char *fname)
 	int ok = 1; /* we currently always have sender */
 	struct user_data upload_ctx;
 	CURLcode res;
+	char from[128];
 
 	upload_ctx.fname = fname;
 	upload_ctx.output = 0;
@@ -75,7 +76,9 @@ static void do_forward(const char *fname)
 	}
 
 	curl_easy_setopt(curl, CURLOPT_MAIL_RCPT, recipients);
-	curl_easy_setopt(curl, CURLOPT_MAIL_FROM, sender);
+	
+	snprintf(from, sizeof(from), "<%s>", sender);
+	curl_easy_setopt(curl, CURLOPT_MAIL_FROM, from);
 
 	curl_easy_setopt(curl, CURLOPT_READFUNCTION, read_callback);
 	curl_easy_setopt(curl, CURLOPT_READDATA, &upload_ctx);
