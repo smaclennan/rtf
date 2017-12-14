@@ -12,28 +12,44 @@ struct user_data {
 static size_t read_callback(char *output, size_t size, size_t nmemb, void *datap)
 {
 	struct user_data *data = datap;
-	char buffer[16 * 1024]; /* SAM HACK */
+	int ch;
+	size_t n = 0;
 
-	syslog(LOG_INFO, "CB: %lu %lu", size, nmemb); // SAM DBG
+	/* I have always seen size == 1 */
+	if (size == 1)
+		size = nmemb;
+	else
+		size *= nmemb;
+	if (size > 0)
+		--size; /* we need room for possible \r\n */
 
-	if (data->output == 1)
-		return fread(output, size, nmemb, data->fp);
-
-	/* We need to find the first "real" header line */
-	data->output = 1;
-
-	while (fgets(buffer, sizeof(buffer), data->fp)) {
-		if (strncasecmp(buffer, "from:", 5) == 0 ||
-			strncasecmp(buffer, "date:", 5) == 0 ||
-			strncasecmp(buffer, "subject:", 8) == 0 ||
-			strncasecmp(buffer, "to:", 3) == 0 ||
-			strncasecmp(buffer, "message-id:", 11) == 0)
-			/* SAM assume it will fit */
-			return snprintf(output, size * nmemb, "%s", buffer);
+	if (data->output == 0) {
+		/* We need to find the first "real" header line */
+		while (fgets(output, size, data->fp))
+			if (!isspace(*output) &&
+				strncmp(output, "Received:", 9) &&
+				strncmp(output, "Return-Path:", 12) &&
+				strncmp(output, "Delivered-To:", 13)) {
+				data->output = 1;
+				char *p = strchr(output, '\n');
+				if (p) *p = 0;
+				strcat(output, "\r\n");
+				n = strlen(output);
+				output += n;
+				break;
+			}
 	}
 
-	syslog(LOG_ERR, "Could not find header start!");
-	return CURL_READFUNC_ABORT;
+	while (n < size && (ch = fgetc(data->fp)) != EOF) {
+		if (ch == '\n') {
+			*output++ = '\r';
+			++n;
+		}
+		*output++ = ch;
+		++n;
+	}
+
+	return n;
 }
 
 static void do_forward(const char *fname)
