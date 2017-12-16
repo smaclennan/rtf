@@ -206,9 +206,6 @@ static void do_forward(const char *fname)
 	CURLcode res;
 	char from[128];
 
-	if (forward_filter())
-		return;
-
 	upload_ctx.fname = fname;
 	upload_ctx.output = 0;
 	upload_ctx.fp = fopen(fname, "r");
@@ -231,12 +228,19 @@ static void do_forward(const char *fname)
 		} else if (strncmp(e->str, "to=", 3) == 0) {
 			recipients = curl_slist_append(recipients, e->str + 3);
 			ok |= 4;
+			if (strcmp(e->str + 3, sender) == 0) {
+				filter_log(2);
+				goto cleanup;
+			}
 		}
 
 	if (ok != 7) {
 		syslog(LOG_ERR, "Invalid configuraton: %d", ok);
 		goto cleanup;
 	}
+
+	if (forward_filter())
+		goto cleanup;
 
 	curl_easy_setopt(curl, CURLOPT_MAIL_RCPT, recipients);
 
