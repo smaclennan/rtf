@@ -99,6 +99,7 @@ static struct entry *whitelist;
 static struct entry *blacklist;
 static struct entry *ignorelist;
 static struct entry *forwardlist;
+static struct entry *forwardfilter;
 
 static const struct entry *saw_bl[2];
 static int add_blacklist;
@@ -114,6 +115,8 @@ static char tmp_file[84], tmp_path[PATH_SIZE];
 
 #ifdef WANT_FORWARDING
 #include <curl/curl.h>
+
+#define LINE_SIZE 4096
 
 struct user_data {
 	const char *fname;
@@ -164,6 +167,35 @@ static size_t read_callback(char *output, size_t size, size_t nmemb, void *datap
 	return n;
 }
 
+/* SAM DBG */
+static void filter_log(int filter)
+{
+	char fname[1024];
+
+	snprintf(fname, sizeof(fname), "%s/.bogofilter/filter.log", home);
+	FILE *fp = fopen(fname, "a");
+	if (fp) {
+		fprintf(fp, "%d <%s>\n", filter, sender);
+		fclose(fp);
+	}
+
+	syslog(LOG_INFO, "Unable to open %s\n", fname);
+}
+
+static int forward_filter(void)
+{
+	struct entry *ff;
+
+	for (ff = forwardfilter; ff; ff = ff->next)
+		if (strcasecmp(ff->str, sender) == 0) {
+			filter_log(1);
+			return 1;
+		}
+
+	filter_log(0);
+	return 0;
+}
+
 static void do_forward(const char *fname)
 {
 	CURL *curl = NULL;
@@ -173,6 +205,9 @@ static void do_forward(const char *fname)
 	struct user_data upload_ctx;
 	CURLcode res;
 	char from[128];
+
+	if (forward_filter())
+		return;
 
 	upload_ctx.fname = fname;
 	upload_ctx.output = 0;
@@ -402,6 +437,8 @@ static int read_config(void)
 				head = &fromlist;
 			else if (strcmp(line, "[forward]") == 0)
 				head = &forwardlist;
+			else if (strcmp(line, "[forward_filter]") == 0)
+				head = &forwardfilter;
 			else {
 				syslog(LOG_INFO, "Unexpected: %s\n", line);
 				head = NULL;
