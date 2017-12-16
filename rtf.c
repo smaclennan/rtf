@@ -196,6 +196,16 @@ static int forward_filter(void)
 	return 0;
 }
 
+static int filter_to(const char *to)
+{   /* sanitize the to */
+	char sane[1024], *p;
+
+	snprintf(sane, sizeof(sane), "%s", to);
+	if ((p = strrchr(sane, '>'))) *p = 0;
+	p = *sane == '<' ? sane + 1 : sane;
+	return strcmp(p, sender) == 0;
+}
+
 static void do_forward(const char *fname)
 {
 	CURL *curl = NULL;
@@ -228,7 +238,7 @@ static void do_forward(const char *fname)
 		} else if (strncmp(e->str, "to=", 3) == 0) {
 			recipients = curl_slist_append(recipients, e->str + 3);
 			ok |= 4;
-			if (strcmp(e->str + 3, sender) == 0) {
+			if (filter_to(e->str + 3)) {
 				filter_log(2);
 				goto cleanup;
 			}
