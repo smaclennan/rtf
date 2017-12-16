@@ -216,6 +216,9 @@ static void do_forward(const char *fname)
 	CURLcode res;
 	char from[128];
 
+	if (forward_filter())
+		return;
+
 	upload_ctx.fname = fname;
 	upload_ctx.output = 0;
 	upload_ctx.fp = fopen(fname, "r");
@@ -248,9 +251,6 @@ static void do_forward(const char *fname)
 		syslog(LOG_ERR, "Invalid configuraton: %d", ok);
 		goto cleanup;
 	}
-
-	if (forward_filter())
-		goto cleanup;
 
 	curl_easy_setopt(curl, CURLOPT_MAIL_RCPT, recipients);
 
