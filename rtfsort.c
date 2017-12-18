@@ -455,13 +455,13 @@ int main(int argc, char *argv[])
 	memset(&sc, 0, sizeof(sc));
 
 	while (fgets(line, sizeof(line), stdin)) {
-		char learn, learn_flag;
+		char learn, learn_flag, forward;
 
-		if (sscanf(line, "%s %c%c%c%c%c%c%c%c%c%c%n",
+		if (sscanf(line, "%s %c%c%c%c%c%c%c%c%c%c%c%n",
 				   l.fname,
 				   &flags[0].val, &flags[1].val, &flags[2].val, &flags[3].val,
 				   &flags[4].val, &flags[5].val, &flags[6].val, &flags[7].val,
-				   &learn, &learn_flag, &n) == 11) {
+				   &learn, &learn_flag, &forward, &n) == 12) {
 			if (!date_in_range(l.fname)) continue;
 			++sc.total;
 			if (verbose > 1)

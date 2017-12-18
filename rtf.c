@@ -167,32 +167,14 @@ static size_t read_callback(char *output, size_t size, size_t nmemb, void *datap
 	return n;
 }
 
-/* SAM DBG */
-static void filter_log(int filter)
-{
-	char fname[1024];
-
-	snprintf(fname, sizeof(fname), "%s/.bogofilter/filter.log", home);
-	FILE *fp = fopen(fname, "a");
-	if (fp) {
-		fprintf(fp, "%d <%s>\n", filter, sender);
-		fclose(fp);
-	}
-
-	syslog(LOG_INFO, "Unable to open %s\n", fname);
-}
-
 static int forward_filter(void)
 {
 	struct entry *ff;
 
 	for (ff = forwardfilter; ff; ff = ff->next)
-		if (strcasecmp(ff->str, sender) == 0) {
-			filter_log(1);
+		if (strcasecmp(ff->str, sender) == 0)
 			return 1;
-		}
 
-	filter_log(0);
 	return 0;
 }
 
@@ -241,10 +223,8 @@ static void do_forward(const char *fname)
 		} else if (strncmp(e->str, "to=", 3) == 0) {
 			recipients = curl_slist_append(recipients, e->str + 3);
 			ok |= 4;
-			if (filter_to(e->str + 3)) {
-				filter_log(2);
+			if (filter_to(e->str + 3))
 				goto cleanup;
-			}
 		}
 
 	if (ok != 7) {
@@ -265,6 +245,8 @@ static void do_forward(const char *fname)
 	res = curl_easy_perform(curl);
 	if(res != CURLE_OK)
 		syslog(LOG_ERR, "curl_easy_perform() failed: %s", curl_easy_strerror(res));
+
+	flags |= FORWARD;
 
 cleanup:
 	fclose(upload_ctx.fp);
@@ -372,10 +354,11 @@ static void logit(void)
 	case SAW_APP: spam = 'A'; break;
 	case IS_SPAM | SAW_APP: spam = 'Z'; break;
 	}
-	fprintf(fp, "%-20s %c%c%c%c%c%c%c%c-- %c %.42s\n", tmp_file,
+	fprintf(fp, "%-20s %c%c%c%c%c%c%c%c--%c %c %.42s\n", tmp_file,
 			OUT(IS_ME, 'M'), OUT(SAW_FROM, 'F'), OUT(SAW_DATE, 'D'),
 			OUT(IS_HAM, 'H'), OUT(IS_IGNORED, 'I'), spam,
-			OUT(FROM_ME, 'f'), OUT(BOGO_SPAM, 'B'), action, p);
+			OUT(FROM_ME, 'f'), OUT(BOGO_SPAM, 'B'),
+			OUT(FORWARD, 'F'), action, p);
 
 	if (add_blacklist) {
 		int i;

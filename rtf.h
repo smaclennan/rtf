@@ -23,6 +23,7 @@
 #define SAW_FROM		0x40
 #define BOGO_SPAM		0x80
 #define SAW_APP			0x100
+#define FORWARD			0x200
 /* flags for rtfsort */
 #define LEARN_SPAM		0x1000
 #define LEARN_HAM		0x2000
