@@ -167,6 +167,27 @@ static size_t read_callback(char *output, size_t size, size_t nmemb, void *datap
 	return n;
 }
 
+static void forward_log(void)
+{
+#if 1
+	char fname[256], *p;
+
+	if (!logfile)
+		return;
+
+	snprintf(fname, sizeof(fname) - 11, "%s", logfile);
+	p = strrchr(fname, '/');
+	if (p) {
+		strcat(p, "/forward.log");
+		FILE *fp = fopen(fname, "a");
+		if (fp) {
+			fprintf(fp, "%s\n", sender);
+			fclose(fp);
+		}
+	}
+#endif
+}
+
 static int forward_filter(void)
 {
 	struct entry *ff;
@@ -247,6 +268,8 @@ static void do_forward(const char *fname)
 		syslog(LOG_ERR, "curl_easy_perform() failed: %s", curl_easy_strerror(res));
 
 	flags |= FORWARD;
+
+	forward_log();
 
 cleanup:
 	fclose(upload_ctx.fp);
