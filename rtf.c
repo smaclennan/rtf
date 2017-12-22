@@ -172,8 +172,10 @@ static void forward_log(void)
 #if 1
 	char fname[256], *p;
 
-	if (!logfile)
+	if (!logfile) {
+		syslog(LOG_INFO, "No logfile"); // SAM DBG
 		return;
+	}
 
 	snprintf(fname, sizeof(fname) - 11, "%s", logfile);
 	p = strrchr(fname, '/');
@@ -183,8 +185,10 @@ static void forward_log(void)
 		if (fp) {
 			fprintf(fp, "%s\n", sender);
 			fclose(fp);
-		}
-	}
+		} else
+			syslog(LOG_INFO, "%s: %m", fname); // SAM DBG
+	} else
+		syslog(LOG_INFO, "%s: invalid", logfile); // SAM DBG
 #endif
 }
 
