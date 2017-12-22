@@ -180,7 +180,7 @@ static void forward_log(void)
 	snprintf(fname, sizeof(fname) - 11, "%s", logfile);
 	p = strrchr(fname, '/');
 	if (p) {
-		strcat(p, "/forward.log");
+		strcpy(p, "/forward.log");
 		FILE *fp = fopen(fname, "a");
 		if (fp) {
 			fprintf(fp, "%s\n", sender);
