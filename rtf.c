@@ -197,7 +197,7 @@ static int forward_filter(void)
 	struct entry *ff;
 
 	for (ff = forwardfilter; ff; ff = ff->next)
-		if (strcasecmp(ff->str, sender) == 0)
+		if (strcasestr(sender, ff->str))
 			return 1;
 
 	return 0;
