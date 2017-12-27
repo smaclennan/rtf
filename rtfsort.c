@@ -29,6 +29,7 @@ struct sort_counts {
 	/* only sort */
 	unsigned real;
 	unsigned spam;
+	unsigned learned_ham;
 	unsigned learned;
 	unsigned not_me;
 	unsigned from;
@@ -173,7 +174,8 @@ static void handle_line(struct log_struct *l, struct sort_counts *sc)
 		return;
 	}
 	if (l->flags & LEARN_HAM) {
-		++sc->learned;
+		/* Don't count learning ham... it messes up the totals */
+		++sc->learned_ham;
 		--sc->spam;
 		++sc->real;
 		return;
@@ -371,6 +373,7 @@ static void raw_dump(struct sort_counts *sc)
 	fprintf(stderr, "actual_spam:\t%6u\n", sc->actual_spam);
 	fprintf(stderr, "\n");
 	fprintf(stderr, "real:\t\t%6u\n", sc->real);
+	fprintf(stderr, "learned_ham:\t%6u\n", sc->learned_ham);
 	fprintf(stderr, "spam:\t\t%6u\n", sc->spam);
 	fprintf(stderr, "learned:\t%6u\n", sc->learned);
 	fprintf(stderr, "not_me:\t\t%6u\n", sc->not_me);
@@ -528,8 +531,8 @@ int main(int argc, char *argv[])
 		printf("Problems with action total\n");
 
 	printf("Mail Stats:\n");
-	printf("  Not me %u from me %u ignored %d real %u learned %u spam %u total %u\n",
-		   sc.not_me, sc.from, sc.ignored, sc.real, sc.learned, sc.spam, sc.total);
+	printf("  Not me %u from me %u ignored %d real %u learned %u ham %u spam %u total %u\n",
+		   sc.not_me, sc.from, sc.ignored, sc.real, sc.learned, sc.learned_ham, sc.spam, sc.total);
 
 	printf("Actions:\n");
 	printf("  Ignored %u ham %u drop %u spam %u bogo %u real %u learned %u\n",
