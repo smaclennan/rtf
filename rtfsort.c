@@ -257,7 +257,7 @@ static void handle_cleanup(const char *str)
 		   delta, n);
 }
 
-char *strdate(time_t date)
+static char *strdate(time_t date)
 {
 	struct tm *tm = localtime(&date);
 	char *str = malloc(16);
