@@ -335,7 +335,7 @@ static void blacklist_dump(int html)
 	if (html) {
 		printf("<p><table border=0>\n<tr><th colspan=3>Blacklist counts\n");
 		for (bl = bl_list; bl; bl = bl->next)
-			printf("<tr><td align=left>%s<td align=right width=60>%d<td align=right width=60>%d\n",
+			printf("<tr><td class=name>%s<td width=60>%d<td width=60>%d\n",
 				   bl->str, bl->count, bl->bogo);
 		printf("</table>\n");
 	} else {
