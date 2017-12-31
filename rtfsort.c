@@ -1,4 +1,5 @@
 #include "rtf.h"
+#include <stdarg.h>
 #include <assert.h>
 #include <limits.h>
 #include <pwd.h>
@@ -325,11 +326,19 @@ count:
 		++bl->bogo;
 }
 
-static void blacklist_dump(void)
+static void blacklist_dump(int html)
 {
-	if (bl_list) {
-		struct black *bl;
+	if (!bl_list) return;
 
+	struct black *bl;
+
+	if (html) {
+		printf("<p><table border=0>\n<tr><th colspan=3>Blacklist counts\n");
+		for (bl = bl_list; bl; bl = bl->next)
+			printf("<tr><td align=left>%s<td align=right width=60>%d<td align=right width=60>%d\n",
+				   bl->str, bl->count, bl->bogo);
+		printf("</table>\n");
+	} else {
 		printf("\nBlacklist counts:\n");
 
 		for (bl = bl_list; bl; bl = bl->next)
@@ -427,16 +436,42 @@ static struct flag {
 };
 #define NUM_FLAGS (sizeof(flags) / sizeof(struct flag))
 
+static void outit(int html, const char *fmt, ...)
+{
+	static int first_line = 1;
+	va_list ap;
+	char line[256], *p, *e;
+
+	va_start(ap, fmt);
+	vsnprintf(line, sizeof(line), fmt, ap);
+	va_end(ap);
+
+	if (html) {
+		if (first_line) {
+			fputs("<body>\n<p>", stdout);
+			first_line = 0;
+		}
+		for (p = line; *p == ' '; ++p)
+			fputs("&nbsp;&nbsp;", stdout);
+		if ((e = strchr(p, '\n')))
+			*e = 0;
+		fputs(p, stdout);
+		if (e)
+			fputs("<br>\n", stdout);
+	} else
+		fputs(line, stdout);
+}
+
 int main(int argc, char *argv[])
 {
 	char line[80];
-	int i, c, n, do_cleanup = 0, dump_raw = 0;
+	int i, c, n, do_cleanup = 0, dump_raw = 0, html = 0;
 	struct log_struct l;
 	struct sort_counts sc;
 
 	assert(NUM_FLAGS == 8);
 
-	while ((c = getopt(argc, argv, "cd:ru:v")) != EOF)
+	while ((c = getopt(argc, argv, "cd:ru:vH")) != EOF)
 		switch (c) {
 		case 'c':
 			do_cleanup = 1;
@@ -453,6 +488,8 @@ int main(int argc, char *argv[])
 		case 'v':
 			++verbose;
 			break;
+		case 'H':
+			html = 1;
 		}
 
 	memset(&sc, 0, sizeof(sc));
@@ -519,48 +556,47 @@ int main(int argc, char *argv[])
 	}
 
 	if (user)
-		printf("Summary %s to %s for %s\n",
-			   strdate(min_date), strdate(max_date), user->pw_gecos);
+		outit(html, "Summary %s to %s for %s\n",
+			  strdate(min_date), strdate(max_date), user->pw_gecos);
 	else
-		printf("Summary %s to %s\n", strdate(min_date), strdate(max_date));
+		outit(html, "Summary %s to %s\n", strdate(min_date), strdate(max_date));
 
 	if (sc.not_me + sc.ignored + sc.real + sc.learned + sc.spam != sc.total)
-		printf("Problems with total\n");
+		outit(html, "Problems with total\n");
 	if (sc.ignore_action + sc.ham + sc.drop + sc.spam_action + sc.bogo + sc.def +
 		sc.learned_spam != sc.total)
-		printf("Problems with action total\n");
+		outit(html, "Problems with action total\n");
 
-	printf("Mail Stats:\n");
-	printf("  Not me %u from me %u ignored %d real %u learned %u ham %u spam %u total %u\n",
+	outit(html, "Mail Stats:\n");
+	outit(html, "  Not me %u from me %u ignored %d real %u learned %u ham %u spam %u total %u\n",
 		   sc.not_me, sc.from, sc.ignored, sc.real, sc.learned, sc.learned_ham, sc.spam, sc.total);
 
-	printf("Actions:\n");
-	printf("  Ignored %u ham %u drop %u spam %u bogo %u real %u learned %u\n",
+	outit(html, "Actions:\n");
+	outit(html, "  Ignored %u ham %u drop %u spam %u bogo %u real %u learned %u\n",
 		   sc.ignore_action, sc.ham, sc.drop, sc.spam_action, sc.bogo, sc.def, sc.learned_spam);
 
 	sc.actual_spam = sc.spam_action + sc.drop + sc.bogo + sc.learned_spam;
 
-	printf("We caught %.0f%% bogofilter %.0f%% missed %.0f%%.",
+	outit(html, "We caught %.0f%% bogofilter %.0f%% missed %.0f%%.\n",
 		   (double)(sc.spam_action + sc.drop) * 100.0 / (double)sc.actual_spam,
 		   (double)sc.bogo_total * 100.0 / (double)sc.actual_spam,
 		   (double)sc.learned_spam * 100.0 / (double)sc.actual_spam);
 	if (sc.bad_ham) {
-		printf(" Bad ham %u.", sc.bad_ham);
+		outit(html, " Bad ham %u.", sc.bad_ham);
 
 		if (verbose) {
 			struct list *l;
 
 			for (l = ham; l; l = l->next)
 				if (l->bad)
-					printf("  %s\n", l->fname);
+					outit(html, "  %s\n", l->fname);
 		}
 	}
-	putchar('\n');
 
-	printf("Spam was %.0f%% of all messages\n",
+	outit(html, "Spam was %.0f%% of all messages\n",
 		   (double)sc.actual_spam * 100.0 / (double)sc.total);
 
-	blacklist_dump();
+	blacklist_dump(html);
 
 	if (dump_raw)
 		raw_dump(&sc);
