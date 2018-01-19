@@ -606,9 +606,33 @@ static inline void filter_from(const char *from)
 		flags |= FROM_ME;
 }
 
+/* Check for a subject of 'hi' and a one name from */
+static void check_hi(char *subject, char *from)
+{
+	subject += 8; /* skip Subject: */
+	while (isspace(*subject)) ++subject;
+	if (strncmp(subject, "hi", 2) == 0)
+		subject += 2;
+	while (isspace(*subject)) ++subject;
+	if (*subject)
+		return;
+
+	from += 5; /* skip From: */
+	while (isspace(*from)) ++from;
+	while (isalpha(*from)) ++from;
+	while (isspace(*from)) ++from;
+	if (*from && *from != '<')
+		return;
+
+	action = 'D';
+	run_bogofilter(tmp_path, "-s");
+	spam();
+}
+
 static void filter(void)
 {
 	const struct entry *e;
+	char *from = NULL;
 	FILE *fp = fopen(tmp_path, "r");
 	if (!fp) {
 		syslog(LOG_WARNING, "%s: %m", tmp_path);
@@ -634,6 +658,7 @@ static void filter(void)
 		} else if (strncasecmp(buff, "From:", 5) == 0) {
 			flags |= SAW_FROM;
 			filter_from(buff);
+			from = strdup(buff);
 		} else if (strncasecmp(buff, "Subject:", 8) == 0) {
 			if ((subject = strdup(buff)))
 				strtok(subject, "\r\n");
@@ -697,6 +722,9 @@ static void filter(void)
 		run_bogofilter(tmp_path, "-s");
 		drop();
 	}
+
+	/* SAM HACK */
+	check_hi(subject, from);
 
 	action = 'h';
 	run_bogofilter(tmp_path, "-n");
