@@ -392,7 +392,7 @@ static void logit(void)
 
 		for (i = 0; i < 2; ++i)
 			if (saw_bl[i])
-				fprintf(fp, "%-20s B%c-----%c-- %c %.42s\n", tmp_file,
+				fprintf(fp, "%-20s B%c-----%c--- %c %.42s\n", tmp_file,
 						i ? 'S' : 'F', OUT(BOGO_SPAM, 'B'),
 						action, saw_bl[i]->str);
 	}

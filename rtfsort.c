@@ -18,7 +18,6 @@ static struct passwd *user;
 
 struct log_struct {
 	char fname[80];
-	char subject[80];
 	unsigned flags;
 };
 
@@ -302,8 +301,7 @@ static void blacklist_count(char *str, char whence, char bogo)
 	struct black *bl;
 	char *p;
 
-	if (*str) ++str;
-	if (*str == ' ') ++str;
+	while (isspace(*str)) ++str;
 	for (p = str; *p && *p != '\n'; ++p)
 		if (isupper(*p))
 			*p = tolower(*p);
@@ -495,59 +493,74 @@ int main(int argc, char *argv[])
 	memset(&sc, 0, sizeof(sc));
 
 	while (fgets(line, sizeof(line), stdin)) {
-		char learn, learn_flag, forward;
+		char learn, learn_flag, forward, action;
 
-		if (sscanf(line, "%s %c%c%c%c%c%c%c%c%c%c%c%n",
+		c = sscanf(line, "%s %c%c%c%c%c%c%c%c%c%c%c %c%n",
 				   l.fname,
 				   &flags[0].val, &flags[1].val, &flags[2].val, &flags[3].val,
 				   &flags[4].val, &flags[5].val, &flags[6].val, &flags[7].val,
-				   &learn, &learn_flag, &forward, &n) == 12) {
-			if (!date_in_range(l.fname)) continue;
-			++sc.total;
+				   &learn, &learn_flag, &forward, &action, &n);
+
+		if (!date_in_range(l.fname)) {
+			printf("Skipping %s\n", l.fname); // SAM DBG
+			continue;
+		}
+
+		if (flags[0].val == 'B') {
+			char subject[80];
+
+			snprintf(subject, sizeof(subject), "%s", line + n);
+			blacklist_count(subject, flags[1].val, flags[7].val);
+			continue;
+		}
+
+		++sc.total;
+
+		if (c == 13) {
+			assert(learn != 'L');
 			if (verbose > 1)
 				fputs(line, stderr);
 
-			if (line[n] == ' ')
-				++n;
-			snprintf(l.subject, sizeof(l.subject), "%s", line + n);
-
 			l.flags = 0;
-			if (learn == 'L')
-				/* learn is special */
-				switch (learn_flag) {
-				case 'S': l.flags |= LEARN_SPAM; break;
-				case 'H': l.flags |= LEARN_HAM; break;
-				case 'D':
-					--sc.total;
-					if (do_cleanup)
-						handle_cleanup(l.fname);
-					continue;
-				default: printf("Invalid learn flags %c\n", learn_flag);
-				}
-			else if (flags[0].val == 'B') {
-				blacklist_count(l.subject, flags[1].val, flags[7].val);
-				--sc.total; /* does not count */
-				continue;
-			} else
-				for (i = 0; i < NUM_FLAGS; ++i)
-					if (flags[i].flag & IS_SPAM)
-						/* Spam is special */
-						switch (flags[i].val) {
-						case 'S': l.flags |= IS_SPAM; break;
-						case 'A': l.flags |= SAW_APP; break;
-						case 'Z': l.flags |= IS_SPAM | SAW_APP; break;
-						case '-': break;
-						default: printf("Invalid spam flag %c\n", flags[i].val);
-						}
-					else if (flags[i].val == flags[i].set)
-						l.flags |= flags[i].flag;
-					else if (flags[i].val != '-')
-						printf("Unhandled flag %c: %s\n", flags[i].val, line);
+			for (i = 0; i < NUM_FLAGS; ++i)
+				if (flags[i].flag & IS_SPAM)
+					/* Spam is special */
+					switch (flags[i].val) {
+					case 'S': l.flags |= IS_SPAM; break;
+					case 'A': l.flags |= SAW_APP; break;
+					case 'Z': l.flags |= IS_SPAM | SAW_APP; break;
+					case '-': break;
+					default: printf("Invalid spam flag %c\n", flags[i].val);
+					}
+				else if (flags[i].val == flags[i].set)
+					l.flags |= flags[i].flag;
+				else if (flags[i].val != '-')
+					printf("Unhandled flag %c: %s\n", flags[i].val, line);
 
 			if (l.flags & IS_HAM)
 				add_ham(l.fname);
 			else if (l.flags & LEARN_SPAM)
 				check_ham(l.fname, &sc);
+
+			handle_line(&l, &sc);
+			handle_actions(&l, &sc);
+		} else if (c == 12) {
+			assert(learn == 'L');
+
+			l.flags = 0;
+			switch (learn_flag) {
+			case 'S':
+				l.flags |= LEARN_SPAM;
+				check_ham(l.fname, &sc);
+				break;
+			case 'H': l.flags |= LEARN_HAM; break;
+			case 'D':
+				--sc.total;
+				if (do_cleanup)
+					handle_cleanup(l.fname);
+				continue;
+			default: printf("Invalid learn flags %c\n", learn_flag);
+			}
 
 			handle_line(&l, &sc);
 			handle_actions(&l, &sc);
