@@ -1,8 +1,9 @@
-What do the log fields mean:
+What do the log fields mean?
+All fields - if not set.
 
 Standard:
 
-  0  M      IS_ME		- the to, cc, or bcc has my email address (need -d)
+  0  M      IS_ME	- the to, cc, or bcc has my email address (need -d)
   1  F      SAW_FROM	- the from field exists, spam if it doesn't
   2  D      SAW_DATE	- the date field exists, spam if it doesn't
   3  H      IS_HAM	- we think it is ham
@@ -10,25 +11,21 @@ Standard:
   5  S|A|Z  IS_SPAM	- S for spam,  A for drop app, Z for both
   6  f      FROM_ME	- claims to be from me
   7  B      BOGO_SPAM	- bogofilter says it is spam
-
-  8  L			- learnem "learned" something
-  9  S|H|D		- S for spam, H for ham, D for cleanup directories
-
-  10 F                  - we forwarded the message
-
+  8  -
+  9  -
+  10 F			- we forwarded the message
   11 <space>
-
   12 action
-
 
 If add blacklist counts (-c) is set:
 
   0  B
-  1  S|F                - S for subject, F for from
-  7  B                  - bogofilter caught
+  1  S|F		- S for subject, F for from
+  7  B			- bogofilter caught
   11 <space>
   12 action
 
-Notes:
+Learnem (only 10 chars):
 
-The learnem program stops at 9.
+  8  L			- learnem "learned" something
+  9  S|H|D		- S for spam, H for ham, D for cleanup directories
