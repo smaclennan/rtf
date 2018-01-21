@@ -606,8 +606,9 @@ int main(int argc, char *argv[])
 		}
 	}
 
-	outit(html, "Spam was %.0f%% of all messages\n",
-		   (double)sc.actual_spam * 100.0 / (double)sc.total);
+	outit(html, "Spam was %.0f%% (%u) of all messages\n",
+		  (double)sc.actual_spam * 100.0 / (double)sc.total,
+		  sc.actual_spam);
 
 	blacklist_dump(html);
 
