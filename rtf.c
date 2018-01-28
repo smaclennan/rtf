@@ -656,7 +656,16 @@ static void check_hi(char *subject, char *from)
 	if (*from && *from != '<')
 		return;
 
-	action = 'D';
+	if (add_blacklist) {
+		/* Add an entry to the blacklist count */
+		struct entry *e = calloc(1, sizeof(struct entry));
+		if (e) {
+			e->str = "hi";
+			blacklist_count(e, 1);
+		}
+	}
+
+	action = 'S';
 	run_bogofilter(tmp_path, "-s");
 	spam();
 }
