@@ -55,12 +55,22 @@
  *
  * If you enable app checking, we need to read the entire email to
  * check for attachments. Normally, only the header needs to be read.
+ *
+ * You can put regular expressions in the list match strings. Regular
+ * expressions start with #. All other strings are literal and do not
+ * go through the regexp parser.
+ *
+ * Note that you are given the entire header line. This means you can
+ * match on the field to differentiate say To: and Cc:.
  */
 
 #include "rtf.h"
 #include <sys/wait.h>
+#include <regex.h>
 
 #define WANT_FORWARDING
+
+#define REGEXP_FLAGS (REG_EXTENDED | REG_ICASE | REG_NEWLINE)
 
 #define BOGOFILTER "bogofilter"
 
@@ -69,6 +79,7 @@ static int train_bogo;
 static int run_drop;
 static int drop_apps;
 static int forward;
+static int just_checking;
 static const char *logfile;
 static const char *home;
 static char *subject = "NONE";
@@ -90,6 +101,7 @@ static unsigned flags;
 
 struct entry {
 	const char *str;
+	regex_t *reg;
 	struct entry *next;
 };
 
@@ -403,22 +415,37 @@ static void logit(void)
 	fclose(fp);
 }
 
-static void add_entry(struct entry **head, const char *str)
+static int add_entry(struct entry **head, const char *str)
 {
-	struct entry *new = malloc(sizeof(struct entry));
+	struct entry *new = calloc(1, sizeof(struct entry));
 	if (!new) goto oom;
 
-	if (!(new->str = strdup(str))) {
-		free(new);
+	if (*str == '#') {
+		new->reg = malloc(sizeof(regex_t));
+		if (!new->reg) goto oom;
+
+		int rc = regcomp(new->reg, str + 1, REGEXP_FLAGS);
+		if (rc) {
+			char err[80];
+
+			regerror(rc, new->reg, err, sizeof(err));
+			if (just_checking)
+				printf("%s: %s\n", str, err);
+			else
+				syslog(LOG_WARNING, "Bad regexp '%s': %s", str, err);
+			free(new->reg);
+			free(new);
+			return 1;
+		}
+	} else if (!(new->str = strdup(str)))
 		goto oom;
-	}
 
 	new->next = *head;
 	*head = new;
-	return;
+	return 0;
 
 oom:
-	syslog(LOG_WARNING, "Out of memory.");
+	syslog(LOG_ERR, "Out of memory.");
 	exit(0);
 }
 
@@ -431,6 +458,7 @@ static int read_config(void)
 {
 	char fname[PATH_SIZE];
 	struct entry **head = NULL;
+	int rc = 0;
 
 	snprintf(fname, sizeof(fname), "%s/.rtf", home);
 
@@ -468,11 +496,11 @@ static int read_config(void)
 				head = NULL;
 			}
 		} else if (head)
-			add_entry(head, line);
+			rc |= add_entry(head, line);
 	}
 
 	fclose(fp);
-	return 0;
+	return rc;
 }
 
 static int run_bogofilter(const char *fname, char *flags)
@@ -500,20 +528,18 @@ static void _safe_rename(const char *path)
 
 static void ham(void)
 {
-	if (!file_mode) {
-		char path[PATH_SIZE];
-		snprintf(path, sizeof(path), "%s/Maildir/new/%s", home, tmp_file);
+	char path[PATH_SIZE];
+	snprintf(path, sizeof(path), "%s/Maildir/new/%s", home, tmp_file);
 
-		/* We technically should forward after rename... but it is
-		 * racy to forward the "real" message but safe with the tmp
-		 * message.
-		 */
-		if (forward && !dry_run)
-			do_forward(tmp_path);
+	/* We technically should forward after rename... but it is
+	 * racy to forward the "real" message but safe with the tmp
+	 * message.
+	 */
+	if (forward && !dry_run)
+		do_forward(tmp_path);
 
-		_safe_rename(path);
-		exit(99); /* don't continue - we handled it */
-	}
+	_safe_rename(path);
+	exit(99); /* don't continue - we handled it */
 }
 
 static void safe_rename(const char *subdir)
@@ -534,9 +560,15 @@ static const struct entry *list_filter(const char *line, struct entry * const he
 {
 	struct entry *e;
 
-	for (e = head; e; e = e->next)
-		if (strcasestr(line, e->str))
+	for (e = head; e; e = e->next) {
+		if (e->reg) {
+			regmatch_t match[1];
+
+			if (regexec(e->reg, line, 1, match, 0) == 0)
+				return e;
+		} else if (strcasestr(line, e->str))
 			return e;
+	}
 
 	return NULL;
 }
@@ -754,7 +786,7 @@ static int setup_file(const char *fname)
 int main(int argc, char *argv[])
 {
 	int c, rc;
-	while ((c = getopt(argc, argv, "abcdfl:nF:T")) != EOF)
+	while ((c = getopt(argc, argv, "abcdfl:nCF:T")) != EOF)
 		switch (c) {
 		case 'a': ++drop_apps; break;
 		case 'b': run_bogo = 1; break;
@@ -763,6 +795,7 @@ int main(int argc, char *argv[])
 		case 'f': forward = 1; break;
 		case 'l': logfile = optarg; break;
 		case 'n': dry_run = 1; break;
+		case 'C': just_checking = 1; break;
 		case 'F': file_mode = optarg; break;
 		case 'T': train_bogo = run_bogo = 1; break;
 		}
@@ -773,13 +806,19 @@ int main(int argc, char *argv[])
 		return 0; /* continue */
 	}
 
-	sender = getenv("SENDER");
-	if (!sender) {
-		syslog(LOG_ERR, "Email with no sender!");
-		return 0;
-	}
+	rc = read_config();
+	if (just_checking)
+		return rc;
 
-	read_config();
+	if (file_mode)
+		sender = "good-sender";
+	else {
+		sender = getenv("SENDER");
+		if (!sender) {
+			syslog(LOG_ERR, "Email with no sender!");
+			return 0;
+		}
+	}
 
 	if (file_mode)
 		rc = setup_file(file_mode);
