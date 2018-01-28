@@ -57,8 +57,8 @@
  * check for attachments. Normally, only the header needs to be read.
  *
  * You can put regular expressions in the list match strings. Regular
- * expressions start with #. All other strings are literal and do not
- * go through the regexp parser.
+ * expressions start with a plus sign (+). All other strings are
+ * literal and do not go through the regexp parser.
  *
  * Note that you are given the entire header line. This means you can
  * match on the field to differentiate say To: and Cc:.
@@ -420,7 +420,7 @@ static int add_entry(struct entry **head, const char *str)
 	struct entry *new = calloc(1, sizeof(struct entry));
 	if (!new) goto oom;
 
-	if (*str == '#') {
+	if (*str == '+') {
 		new->reg = malloc(sizeof(regex_t));
 		if (!new->reg) goto oom;
 
