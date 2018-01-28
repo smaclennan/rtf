@@ -82,7 +82,8 @@ static int forward;
 static int just_checking;
 static const char *logfile;
 static const char *home;
-static char *subject = "NONE";
+/* We only print the first 42 chars of subject */
+static char subject[48] = { 'N', 'O', 'N', 'E', 0 };
 static char action = '?';
 static char *sender;
 
@@ -381,10 +382,6 @@ static void logit(void)
 		/* keep going even if we don't get the lock */
 	}
 
-	char *p = subject;
-	if (strncmp(subject, "Subject: ", 9) == 0)
-		p += 9;
-
 #define OUT(a, c) ((flags & (a)) ? (c) : '-')
 	/* Last two flags are for learnem */
 	char spam = '-';
@@ -397,7 +394,7 @@ static void logit(void)
 			OUT(IS_ME, 'M'), OUT(SAW_FROM, 'F'), OUT(SAW_DATE, 'D'),
 			OUT(IS_HAM, 'H'), OUT(IS_IGNORED, 'I'), spam,
 			OUT(FROM_ME, 'f'), OUT(BOGO_SPAM, 'B'),
-			OUT(FORWARD, 'F'), action, p);
+			OUT(FORWARD, 'F'), action, subject);
 
 	if (add_blacklist) {
 		int i;
@@ -641,12 +638,7 @@ static inline void filter_from(const char *from)
 /* Check for a subject of 'hi' and a one name from */
 static void check_hi(char *subject, char *from)
 {
-	subject += 8; /* skip Subject: */
-	while (isspace(*subject)) ++subject;
-	if (strncmp(subject, "hi", 2) == 0)
-		subject += 2;
-	while (isspace(*subject)) ++subject;
-	if (*subject)
+	if (strncmp(subject, "hi", 2) && strncmp(subject, "hey", 3))
 		return;
 
 	from += 5; /* skip From: */
@@ -668,6 +660,27 @@ static void check_hi(char *subject, char *from)
 	action = 'S';
 	run_bogofilter(tmp_path, "-s");
 	spam();
+}
+
+static void normalize_subject(const char *str)
+{
+	str += 8; /* skip subject: */
+	while (isspace(*str)) ++str;
+	if (!*str) {
+		strcpy(subject, "EMPTY");
+		return;
+	}
+
+	int i, end = 0;
+	for (i = 0; *str && i < sizeof(subject) - 1; ++i, ++str) {
+		subject[i] = *str;
+		if (!isspace(*str)) {
+			end = i;
+			if (!isprint(*str))
+				subject[i] = '~';
+		}
+	}
+	subject[end + 1] = 0;
 }
 
 static void filter(void)
@@ -701,10 +714,7 @@ static void filter(void)
 			filter_from(buff);
 			from = strdup(buff);
 		} else if (strncasecmp(buff, "Subject:", 8) == 0) {
-			if ((subject = strdup(buff)))
-				strtok(subject, "\r\n");
-			else
-				subject = "NOMEM";
+			normalize_subject(buff);
 			if ((e = list_filter(buff, blacklist))) {
 				flags |= IS_SPAM;
 				blacklist_count(e, 1);
