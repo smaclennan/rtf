@@ -783,16 +783,34 @@ static int setup_file(const char *fname)
 	return 0;
 }
 
+static void usage(void)
+{
+	puts("usage:\trtf [-abcdfnCT] [-l logfile] [-F file]\n"
+		 "where:\t-a   drop emails with app attachments\n"
+		 "\t-b   run bogofilter\n"
+		 "\t-c   add blacklist counts to logfile\n"
+		 "\t-d   mark emails not 'from me' as spam\n"
+		 "\t-f   forward emails\n"
+		 "\t-h   this help\n"
+		 "\t-n   dry run (mainly used with -F)\n"
+		 "\t-C   just check the config file\n"
+		 "\t     validates any regular expressions\n"
+		 "\t-F   mainly for debugging rtf\n"
+		 "\t-T   train bogofilter"
+		);
+}
+
 int main(int argc, char *argv[])
 {
 	int c, rc;
-	while ((c = getopt(argc, argv, "abcdfl:nCF:T")) != EOF)
+	while ((c = getopt(argc, argv, "abcdfhl:nCF:T")) != EOF)
 		switch (c) {
 		case 'a': ++drop_apps; break;
 		case 'b': run_bogo = 1; break;
 		case 'c': add_blacklist = 1; break;
 		case 'd': run_drop = 1; break;
 		case 'f': forward = 1; break;
+		case 'h': usage(); exit(0);
 		case 'l': logfile = optarg; break;
 		case 'n': dry_run = 1; break;
 		case 'C': just_checking = 1; break;
