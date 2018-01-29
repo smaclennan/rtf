@@ -638,7 +638,12 @@ static inline void filter_from(const char *from)
 /* Check for a subject of 'hi' and a one name from */
 static void check_hi(char *subject, char *from)
 {
-	if (strncmp(subject, "hi", 2) && strncmp(subject, "hey", 3))
+	if (*subject != 'h')
+		return;
+
+	if (strcmp(subject, "hi") &&
+		strcmp(subject, "hey") &&
+		strcmp(subject, "hello"))
 		return;
 
 	from += 5; /* skip From: */
