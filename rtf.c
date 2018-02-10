@@ -635,17 +635,9 @@ static inline void filter_from(const char *from)
 		flags |= FROM_ME;
 }
 
-/* Check for a subject of 'hi' and a one name from */
-static void check_hi(char *subject, char *from)
+/* Check for a one name from */
+static void check_one_name_from(char *subject, char *from)
 {
-	if (*subject != 'h')
-		return;
-
-	if (strcmp(subject, "hi") &&
-		strcmp(subject, "hey") &&
-		strcmp(subject, "hello"))
-		return;
-
 	from += 5; /* skip From: */
 	while (isspace(*from)) ++from;
 	while (isalpha(*from)) ++from;
@@ -653,11 +645,13 @@ static void check_hi(char *subject, char *from)
 	if (*from && *from != '<')
 		return;
 
+	/* We have a "one name" from */
+
 	if (add_blacklist) {
 		/* Add an entry to the blacklist count */
 		struct entry *e = calloc(1, sizeof(struct entry));
 		if (e) {
-			e->str = "hi";
+			e->str = "one name";
 			blacklist_count(e, 1);
 		}
 	}
@@ -780,7 +774,7 @@ static void filter(void)
 	}
 
 	/* SAM HACK */
-	check_hi(subject, from);
+	check_one_name_from(subject, from);
 
 	action = 'h';
 	run_bogofilter(tmp_path, "-n");
