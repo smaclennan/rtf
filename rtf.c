@@ -640,7 +640,7 @@ static void check_one_name_from(char *subject, char *from)
 {
 	from += 5; /* skip From: */
 	while (isspace(*from)) ++from;
-	while (isalpha(*from)) ++from;
+	while (isalpha(*from) || *from == '"') ++from;
 	while (isspace(*from)) ++from;
 	if (*from && *from != '<')
 		return;
