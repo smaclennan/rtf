@@ -525,18 +525,10 @@ static void _safe_rename(const char *path)
 
 static void ham(void)
 {
-	char path[PATH_SIZE];
-	snprintf(path, sizeof(path), "%s/Maildir/new/%s", home, tmp_file);
-
-	/* We technically should forward after rename... but it is
-	 * racy to forward the "real" message but safe with the tmp
-	 * message.
-	 */
 	if (forward && !dry_run)
 		do_forward(tmp_path);
 
-	_safe_rename(path);
-	exit(99); /* don't continue - we handled it */
+	exit(0); /* continue to next rule */
 }
 
 static void safe_rename(const char *subdir)
