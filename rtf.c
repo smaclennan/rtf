@@ -102,6 +102,7 @@ static unsigned flags;
 
 struct entry {
 	const char *str;
+	const char *folder;
 	regex_t *reg;
 	struct entry *next;
 };
@@ -113,6 +114,8 @@ static struct entry *blacklist;
 static struct entry *ignorelist;
 static struct entry *forwardlist;
 static struct entry *forwardfilter;
+static struct entry *folderlist;
+static const  char *folder_match;
 
 static const struct entry *saw_bl[2];
 static int add_blacklist;
@@ -412,10 +415,47 @@ static void logit(void)
 	fclose(fp);
 }
 
+static int add_folder(struct entry *new, const char *str)
+{
+	char *p = strchr(str, ',');
+
+	if (just_checking) {
+		if (!p)
+			printf("Bad folder line '%s'\n", str);
+		else {
+			char path[PATH_SIZE];
+			snprintf(path, sizeof(path) - strlen(tmp_file), "%s/Maildir/%s/new", home, p + 1);
+			if (access(path, F_OK))
+				printf("Bad folder %s\n", path);
+			return 0;
+		}
+	}
+
+	if (!p) {
+		syslog(LOG_WARNING, "folder line missing , '%s'", str);
+		return 1;
+	}
+
+	*p++ = 0;
+	new->str = strdup(str);
+	new->folder = strdup(p);
+	if (!new->str || !new->folder) {
+		syslog(LOG_ERR, "Out of memory.");
+		return 1; /* not fatal */
+	}
+
+	new->next = folderlist;
+	folderlist = new;
+	return 0;
+}
+
 static int add_entry(struct entry **head, const char *str)
 {
 	struct entry *new = calloc(1, sizeof(struct entry));
 	if (!new) goto oom;
+
+	if (head == &folderlist)
+		return add_folder(new, str);
 
 	if (*str == '+') {
 		new->reg = malloc(sizeof(regex_t));
@@ -488,6 +528,8 @@ static int read_config(void)
 				head = &forwardlist;
 			else if (strcmp(line, "[forward_filter]") == 0)
 				head = &forwardfilter;
+			else if (strcmp(line, "[folders]") == 0)
+				head = &folderlist;
 			else {
 				syslog(LOG_INFO, "Unexpected: %s\n", line);
 				head = NULL;
@@ -525,10 +567,23 @@ static void _safe_rename(const char *path)
 
 static void ham(void)
 {
+	char path[PATH_SIZE];
+
+	if (folder_match) {
+		action = 'f';
+		snprintf(path, sizeof(path), "%s/Maildir/%s/new/%s", home, folder_match, tmp_file);
+	} else
+		snprintf(path, sizeof(path), "%s/Maildir/new/%s", home, tmp_file);
+
+	/* We technically should forward after rename... but it is
+	 * racy to forward the "real" message but safe with the tmp
+	 * message.
+	 */
 	if (forward && !dry_run)
 		do_forward(tmp_path);
 
-	exit(0); /* continue to next rule */
+	_safe_rename(path);
+	exit(99); /* don't continue - we handled it */
 }
 
 static void safe_rename(const char *subdir)
@@ -700,21 +755,29 @@ static void filter(void)
 				flags |= IS_HAM;
 			if (list_filter(buff, melist))
 				flags |= IS_ME;
+			if ((e = list_filter(buff, folderlist)))
+				folder_match = e->folder;
 		} else if (strncasecmp(buff, "From:", 5) == 0) {
 			flags |= SAW_FROM;
 			filter_from(buff);
 			from = strdup(buff);
+			if ((e = list_filter(buff, folderlist)))
+				folder_match = e->folder;
 		} else if (strncasecmp(buff, "Subject:", 8) == 0) {
 			normalize_subject(buff);
 			if ((e = list_filter(buff, blacklist))) {
 				flags |= IS_SPAM;
 				blacklist_count(e, 1);
-			}
+			} else if ((e = list_filter(buff, folderlist)))
+				folder_match = e->folder;
 		} else if (strncasecmp(buff, "Date:", 5) == 0)
 			flags |= SAW_DATE;
 		else if (strncasecmp(buff, "Content-Type:", 13) == 0) {
 			if (check_type(buff + 13))
 				flags |= SAW_APP;
+		} else if (strncasecmp(buff, "List-Post:", 10) == 0) {
+			if ((e = list_filter(buff, folderlist)))
+				folder_match = e->folder;
 		}
 	}
 
