@@ -62,6 +62,11 @@
  *
  * Note that you are given the entire header line. This means you can
  * match on the field to differentiate say To: and Cc:.
+ *
+ * Other features:
+ *
+ * - mail forwarding
+ * - folders
  */
 
 #include "rtf.h"
@@ -682,12 +687,31 @@ static inline void filter_from(const char *from)
 		flags |= FROM_ME;
 }
 
+static int isok(char c)
+{
+	switch (c) {
+	case 'a'...'z':
+	case 'A'...'Z':
+	case '0'...'9':
+		return 1;
+	case '"':
+		return 1;
+	/* for mime decode e.g. =?utf-8?Q?Apple?= */
+	case '=':
+	case '?':
+	case '-':
+		return 1;
+	default:
+		return 0;
+	}
+}
+
 /* Check for a one name from */
 static void check_one_name_from(char *subject, char *from)
 {
 	from += 5; /* skip From: */
 	while (isspace(*from)) ++from;
-	while (isalpha(*from) || *from == '"') ++from;
+	while (isok(*from)) ++from;
 	while (isspace(*from)) ++from;
 	if (*from && *from != '<')
 		return;
