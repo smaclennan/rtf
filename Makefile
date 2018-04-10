@@ -3,12 +3,19 @@
 D = -O2
 CFLAGS += -Wall $(D:1=-g)
 
+WANT_FORWARDING=0
+
+ifeq ($(WANT_FORWARDING),1)
+CFLAGS += -DWANT_FORWARDING
+LIBS += -lcurl
+endif
+
 VERSION=1.0
 
 all: rtf learnem rtfsort
 
 rtf: rtf.c
-	$(CC) $(CFLAGS) -o $@ rtf.c -lcurl
+	$(CC) $(CFLAGS) -o $@ rtf.c $(LIBS)
 
 tarball:
 	rm -rf rtf-$(VERSION)

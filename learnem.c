@@ -37,6 +37,7 @@ static char spam_dir[MY_PATH_MAX];
 static char ignore_dir[MY_PATH_MAX];
 static char config_dir[MY_PATH_MAX];
 static char *logfile;
+static int run_bogo;
 
 static time_t max_age;
 
@@ -71,9 +72,22 @@ static void logit(const char *tmp_file, char flag)
 	fclose(fp);
 }
 
+static void do_bogofilter(const char *old, int spam)
+{
+	if (!run_bogo)
+		return;
+
+	char cmd[512];
+
+	snprintf(cmd, sizeof(cmd), "/usr/bin/bogofilter %s -d %s -B -e '%s'",
+			 spam ? "-Ns" : "-Sn", config_dir, old);
+	int rc = system(cmd);
+	if (rc < 0 || rc > 2)
+		syslog(LOG_ERR, "bogofilter failed on %s!", old);
+}
+
 static void handle_spam(void)
 {
-	char cmd[512];
 	DIR *dir = opendir(learn_dir);
 	if (!dir) {
 		syslog(LOG_ERR, "opendir %s: %s", learn_dir, strerror(errno));
@@ -86,12 +100,7 @@ static void handle_spam(void)
 
 		char old[MY_PATH_MAX], new[MY_PATH_MAX], *p;
 		snprintf(old, sizeof(old), "%s/%s", learn_dir, ent->d_name);
-		snprintf(cmd, sizeof(cmd), "/usr/bin/bogofilter -Ns -d %s -B '%s'", config_dir, old);
-		int rc = system(cmd);
-		if (rc < 0 || rc > 2) {
-			syslog(LOG_ERR, "bogofilter failed on %s!", old);
-			continue;
-		}
+		do_bogofilter(old, 1);
 
 		/* Move to spam and mark read */
 		p = ent->d_name + strlen(ent->d_name) - 1;
@@ -110,7 +119,6 @@ static void handle_spam(void)
 
 static void handle_ham(void)
 {
-	char cmd[512];
 	DIR *dir = opendir(ham_dir);
 	if (!dir) {
 		syslog(LOG_ERR, "opendir %s: %s", ham_dir, strerror(errno));
@@ -123,12 +131,7 @@ static void handle_ham(void)
 
 		char old[MY_PATH_MAX];
 		snprintf(old, sizeof(old), "%s/%s", ham_dir, ent->d_name);
-		snprintf(cmd, sizeof(cmd), "/usr/bin/bogofilter -Sn -d %s -e -B '%s'", config_dir, old);
-		int rc = system(cmd);
-		if (rc < 0 || rc > 2) {
-			syslog(LOG_ERR, "bogofilter failed on %s!", old);
-			continue;
-		}
+		do_bogofilter(old, 0);
 
 		/* Just remove it */
 		if (unlink(old))
@@ -252,8 +255,9 @@ int main(int argc, char *argv[])
 	}
 
 	int c;
-	while ((c = getopt(argc, argv, "d:fl:")) != EOF)
+	while ((c = getopt(argc, argv, "bd:fl:")) != EOF)
 		switch (c) {
+		case 'b': run_bogo = 1; break;
 		case 'd': do_delete = 1; set_max_age(optarg); break;
 		case 'f': foreground = 1; break;
 		case 'l': logfile = optarg; break;

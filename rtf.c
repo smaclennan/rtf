@@ -73,8 +73,6 @@
 #include <sys/wait.h>
 #include <regex.h>
 
-#define WANT_FORWARDING
-
 #define REGEXP_FLAGS (REG_EXTENDED | REG_ICASE | REG_NEWLINE)
 
 #define BOGOFILTER "bogofilter"
@@ -479,7 +477,9 @@ static int add_entry(struct entry **head, const char *str)
 			free(new);
 			return 1;
 		}
-	} else if (!(new->str = strdup(str)))
+	}
+
+	if (!(new->str = strdup(str)))
 		goto oom;
 
 	new->next = *head;
