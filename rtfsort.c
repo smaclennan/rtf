@@ -49,6 +49,8 @@ struct sort_counts {
 	unsigned bad_ham;
 };
 
+static int saw_bogo;
+
 static void add_ham(const char *fname)
 {
 	struct list *l = calloc(1, sizeof(struct list));
@@ -223,8 +225,10 @@ static void handle_actions(struct log_struct *l, struct sort_counts *sc)
 	else
 		++sc->def;
 
-	if (l->flags & BOGO_SPAM)
+	if (l->flags & BOGO_SPAM) {
+		saw_bogo = 1;
 		++sc->bogo_total;
+	}
 }
 
 static void handle_cleanup(const char *str)
@@ -273,7 +277,6 @@ static struct black {
 	char *match; /* lowercase */
 	int count;
 	int bogo;
-	int nomatch;
 	struct black *next;
 } *bl_list, *bl_tail;
 
@@ -315,9 +318,6 @@ static void blacklist_count(char *str, char whence, char bogo)
 	if (!bl)
 		return;
 
-	if (user)
-		bl->nomatch = 1;
-
 count:
 	++bl->count;
 	if (bogo == 'B')
@@ -331,18 +331,24 @@ static void blacklist_dump(int html)
 	struct black *bl;
 
 	if (html) {
-		printf("<p><table border=0>\n<tr><th colspan=3>Blacklist counts\n");
+		printf("<p><table border=0>\n<tr><th colspan=%d>Blacklist counts\n",
+			   saw_bogo ? 3 : 2);
 		for (bl = bl_list; bl; bl = bl->next)
-			printf("<tr><td class=name>%s<td width=60>%d<td width=60>%d\n",
-				   bl->str, bl->count, bl->bogo);
+			if (saw_bogo)
+				printf("<tr><td class=name>%s<td width=60>%d<td width=60>%d\n",
+					   bl->str, bl->count, bl->bogo);
+			else
+				printf("<tr><td class=name>%s<td width=60>%d\n",
+					   bl->str, bl->count);
 		printf("</table>\n");
 	} else {
 		printf("\nBlacklist counts:\n");
 
 		for (bl = bl_list; bl; bl = bl->next)
-			printf("  %c%-42s %6d  %6d\n",
-				   bl->nomatch ? '-' : ' ',
-				   bl->str, bl->count, bl->bogo);
+			if (saw_bogo)
+				printf("  %-42s %6d  %6d\n", bl->str, bl->count, bl->bogo);
+			else
+				printf("  %-42s %6d\n", bl->str, bl->count);
 	}
 }
 
@@ -502,7 +508,7 @@ int main(int argc, char *argv[])
 				   &learn, &learn_flag, &forward, &action, &n);
 
 		if (!date_in_range(l.fname)) {
-			printf("Skipping %s\n", l.fname); // SAM DBG
+			// printf("Skipping %s\n", l.fname);
 			continue;
 		}
 
@@ -590,10 +596,19 @@ int main(int argc, char *argv[])
 
 	sc.actual_spam = sc.spam_action + sc.drop + sc.bogo + sc.learned_spam;
 
-	outit(html, "We caught %.0f%% bogofilter %.0f%% missed %.0f%%.\n",
-		   (double)(sc.spam_action + sc.drop) * 100.0 / (double)sc.actual_spam,
-		   (double)sc.bogo_total * 100.0 / (double)sc.actual_spam,
-		   (double)sc.learned_spam * 100.0 / (double)sc.actual_spam);
+	if (saw_bogo) {
+		outit(html, "We caught %.0f%% bogofilter %.0f%% missed %.0f%%.\n",
+			  (double)(sc.spam_action + sc.drop) * 100.0 / (double)sc.actual_spam,
+			  (double)sc.bogo_total * 100.0 / (double)sc.actual_spam,
+			  (double)sc.learned_spam * 100.0 / (double)sc.actual_spam);
+		outit(html, "Spam was %.0f%% (%u) of all messages\n",
+			  (double)sc.actual_spam * 100.0 / (double)sc.total,
+			  sc.actual_spam);
+	} else
+		outit(html, "Spam was %.0f%% (%u) of all messages. We caught %.0f%%.\n",
+			  (double)sc.actual_spam * 100.0 / (double)sc.total, sc.actual_spam,
+			  (double)(sc.spam_action + sc.drop) * 100.0 / (double)sc.actual_spam);
+
 	if (sc.bad_ham) {
 		outit(html, " Bad ham %u.", sc.bad_ham);
 
@@ -605,10 +620,6 @@ int main(int argc, char *argv[])
 					outit(html, "  %s\n", l->fname);
 		}
 	}
-
-	outit(html, "Spam was %.0f%% (%u) of all messages\n",
-		  (double)sc.actual_spam * 100.0 / (double)sc.total,
-		  sc.actual_spam);
 
 	blacklist_dump(html);
 
