@@ -11,12 +11,12 @@
 #define INOTIFY_MASK IN_MOVED_TO
 
 #ifdef __linux__
-#define QUEUE_TIMEOUT 10000 /* in ms */
+#define QUEUE_TIMEOUT 30000 /* in ms */
 #define HOURLY_TIMEOUT (60 * 60 * 1000)
 
 #define TIMEOUT int
 #else
-static struct timespec queue_timeout  = { .tv_sec = 10 };
+static struct timespec queue_timeout  = { .tv_sec = 30 };
 static struct timespec hourly_timeout = { .tv_sec = 60 * 60 * 1000 };
 
 #define QUEUE_TIMEOUT  &queue_timeout
