@@ -584,7 +584,7 @@ static void ham(void)
 	 * racy to forward the "real" message but safe with the tmp
 	 * message.
 	 */
-	if (forward && !dry_run)
+	if (forward && !folder_match && !dry_run)
 		do_forward(tmp_path);
 
 	_safe_rename(path);
