@@ -601,13 +601,15 @@ int main(int argc, char *argv[])
 			  (double)(sc.spam_action + sc.drop) * 100.0 / (double)sc.actual_spam,
 			  (double)sc.bogo_total * 100.0 / (double)sc.actual_spam,
 			  (double)sc.learned_spam * 100.0 / (double)sc.actual_spam);
-		outit(html, "Spam was %.0f%% (%u) of all messages\n",
+		outit(html, "Spam was %.0f%% (%u) of all messages. Not me %.0f%%\n",
 			  (double)sc.actual_spam * 100.0 / (double)sc.total,
-			  sc.actual_spam);
+			  sc.actual_spam,
+			  (double)sc.not_me * 100.0 / (double)sc.actual_spam);
 	} else
-		outit(html, "Spam was %.0f%% (%u) of all messages. We caught %.0f%%.\n",
+		outit(html, "Spam was %.0f%% (%u) of all messages. We caught %.0f%%, not me %.0f%%.\n",
 			  (double)sc.actual_spam * 100.0 / (double)sc.total, sc.actual_spam,
-			  (double)(sc.spam_action + sc.drop) * 100.0 / (double)sc.actual_spam);
+			  (double)(sc.spam_action + sc.drop) * 100.0 / (double)sc.actual_spam,
+			  (double)sc.not_me * 100.0 / (double)sc.actual_spam);
 
 	if (sc.bad_ham) {
 		outit(html, " Bad ham %u.", sc.bad_ham);
