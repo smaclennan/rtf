@@ -12,7 +12,7 @@ endif
 
 VERSION=1.0
 
-all: rtf learnem rtfsort
+all: rtf learnem rtfsort regexp-check
 
 rtf: rtf.c
 	$(CC) $(CFLAGS) -o $@ rtf.c $(LIBS)

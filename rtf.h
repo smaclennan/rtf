@@ -35,4 +35,6 @@
 #define DROP_DIR		".Drop"
 #define IGNORE_DIR		".Ignore"
 
+#define REGEXP_FLAGS (REG_EXTENDED | REG_ICASE | REG_NEWLINE)
+
 #endif

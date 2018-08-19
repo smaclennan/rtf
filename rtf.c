@@ -73,8 +73,6 @@
 #include <sys/wait.h>
 #include <regex.h>
 
-#define REGEXP_FLAGS (REG_EXTENDED | REG_ICASE | REG_NEWLINE)
-
 #define BOGOFILTER "bogofilter"
 
 static int run_bogo;
