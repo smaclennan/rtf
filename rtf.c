@@ -69,6 +69,11 @@
  * - folders
  */
 
+/* Ideas that failed:
+ *
+ * - filter out utf from - too many false positives
+ */
+
 #include "rtf.h"
 #include <sys/wait.h>
 #include <regex.h>
@@ -769,7 +774,7 @@ static void filter(void)
 
 	while (fgets(buff, sizeof(buff), fp)) {
 		if (*buff == '\n')
-			break; /* end of buff */
+			break; /* end of header */
 		else if (strncasecmp(buff, "To:", 3) == 0 ||
 				 strncasecmp(buff, "Cc:", 3) == 0 ||
 				 strncasecmp(buff, "Bcc:", 4) == 0) {
