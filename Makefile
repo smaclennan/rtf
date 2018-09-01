@@ -2,17 +2,18 @@
 # returns -g, else it returns the default (-O2).
 D = -O2
 CFLAGS += -Wall $(D:1=-g)
+CFLAGS += -I/usr/local/include
 
 WANT_FORWARDING=1
 
 ifeq ($(WANT_FORWARDING),1)
 CFLAGS += -DWANT_FORWARDING
-LIBS += -lcurl
+LIBS += -L/usr/local/lib -lcurl
 endif
 
 VERSION=1.0
 
-all: rtf learnem rtfsort regexp-check
+all: rtf learnem rtfsort regex-check
 
 rtf: rtf.c
 	$(CC) $(CFLAGS) -o $@ rtf.c $(LIBS)
@@ -36,5 +37,5 @@ install-strip: install
 	strip $(DESTDIR)/usr/bin/*
 
 clean:
-	rm -f rtf learnem rtfsort TAGS rtf-*.tar.gz
+	rm -f rtf learnem rtfsort regex-check TAGS rtf-*.tar.gz
 
