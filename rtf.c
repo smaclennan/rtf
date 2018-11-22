@@ -1,5 +1,5 @@
 /* rtf.c - Really Trivial Filter
- * Copyright (C) 2012-2016 Sean MacLennan <seanm@seanm.ca>
+ * Copyright (C) 2012-2018 Sean MacLennan <seanm@seanm.ca>
  *
  * This program is free software: you can redistribute it and/or modify
  * it under the terms of the GNU General Public License as published by

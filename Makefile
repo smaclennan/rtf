@@ -11,7 +11,7 @@ CFLAGS += -DWANT_FORWARDING
 LIBS += -L/usr/local/lib -lcurl
 endif
 
-VERSION=1.0
+VERSION=1.1
 
 all: rtf learnem rtfsort regex-check
 
@@ -21,7 +21,7 @@ rtf: rtf.c
 tarball:
 	rm -rf rtf-$(VERSION)
 	mkdir rtf-$(VERSION)
-	cp rtf.c learnem.c rtfsort.c rtf.h Makefile README logrotate.rtf rtf-$(VERSION)
+	cp rtf.c learnem.c rtfsort.c regex-check.c rtf.h Makefile README logrotate.rtf rtf-$(VERSION)
 	tar zcf rtf-$(VERSION).tar.gz rtf-$(VERSION)
 	rm -rf rtf-$(VERSION)
 
