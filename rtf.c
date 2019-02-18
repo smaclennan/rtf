@@ -89,7 +89,7 @@ static int just_checking;
 static const char *logfile;
 static const char *home;
 /* We only print the first 42 chars of subject */
-static char subject[48] = { 'N', 'O', 'N', 'E', 0 };
+static char subject[48] = { 'N', 'O', 'N', 'E' };
 static char action = '?';
 static char *sender;
 
