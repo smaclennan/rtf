@@ -33,9 +33,7 @@
  * 3) Blacklist (spam)
  * 4) Check if from me (spam)
  * 5) Check if the from and/or date fields are missing (spam)
- * 6) Optionally runs the emails through bogofilter (ham or spam)
- * 7) Optionally check if not on the me list (spam)
- * 8) Optionally check if saw application attachment (app)
+ * 6) Optionally check if not on the me list (spam)
  *
  * Actions:
  *
@@ -77,30 +75,16 @@
 #include <sys/wait.h>
 #include <regex.h>
 
-#define BOGOFILTER "bogofilter"
-
-static int run_bogo;
-static int train_bogo;
 static int run_drop;
-static int drop_apps;
 static int just_checking;
 static const char *logfile;
 static const char *home;
 /* We only print the first 42 chars of subject */
 static char subject[48] = { 'N', 'O', 'N', 'E' };
 static char action = '?';
-static char *sender;
 
 /* For dry_run you probably want file mode too. */
 static int dry_run;
-
-/* File mode is a special case for running rtf on existing email. It
- * will move the mail to the spam or drop or ignore folders but leaves
- * ham alone.
- *
- * File mode can only handle one file at a time.
- */
-static const char *file_mode;
 
 static unsigned flags;
 
@@ -219,15 +203,9 @@ static void logit(void)
 
 #define OUT(a, c) ((flags & (a)) ? (c) : '-')
 	/* Last two flags are for learnem */
-	char spam = '-';
-	switch (flags & (IS_SPAM | SAW_APP)) {
-	case IS_SPAM: spam = 'S'; break;
-	case SAW_APP: spam = 'A'; break;
-	case IS_SPAM | SAW_APP: spam = 'Z'; break;
-	}
 	fprintf(fp, "%-20s %c%c%c%c%c%c%c%c--%c %c %.42s\n", tmp_file,
 			OUT(IS_ME, 'M'), OUT(SAW_FROM, 'F'), OUT(SAW_DATE, 'D'),
-			OUT(IS_HAM, 'H'), OUT(IS_IGNORED, 'I'), spam,
+			OUT(IS_HAM, 'H'), OUT(IS_IGNORED, 'I'), OUT(IS_SPAM, 'S'),
 			OUT(FROM_ME, 'f'), OUT(BOGO_SPAM, 'B'),
 			OUT(FORWARD, 'F'), action, subject);
 
@@ -432,16 +410,6 @@ static int read_config(void)
 	return rc;
 }
 
-static int run_bogofilter(const char *fname, char *flags)
-{
-	if (run_bogo) {
-		char cmd[256];
-		snprintf(cmd, sizeof(cmd) - 3, "%s %s -B %s", BOGOFILTER, flags, fname);
-		return WEXITSTATUS(system(cmd));
-	} else
-		return 1; /* mark as non-spam */
-}
-
 static void _safe_rename(const char *path)
 {
 	if (dry_run) {
@@ -498,55 +466,6 @@ static const struct entry *list_filter(const char *line, struct entry * const he
 	}
 
 	return NULL;
-}
-
-/* Returns 1 if type should be dropped */
-static int check_type(const char *type)
-{
-	while (isspace(*type))
-		++type;
-
-	if (strncasecmp(type, "application/", 12))
-		return 0;
-
-	type += 12;
-
-	switch (*type) {
-	case 'x':
-		/* Catch x-compress and x-compressed */
-		if (strncmp(type, "x-compress", 10) == 0)
-			return 1;
-		/* x-zip and x-zip-compressed */
-		if (strncmp(type, "x-zip", 5) == 0)
-			return 1;
-		/* x-rar and x-rar-compressed */
-		if (strncmp(type, "x-rar", 5) == 0)
-			return 1;
-		break;
-	case 'z':
-		if (strncmp(type, "zip", 3) == 0)
-			return 1;
-		break;
-	case 'r':
-		if (strncmp(type, "rar", 5) == 0)
-			return 1;
-		break;
-	case 'v':
-		/* Not sure about these... */
-		if (drop_apps > 1) {
-			if (strncmp(type, "vnd.ms-word.document.macroEnabled", 33) == 0)
-				return 1;
-			if (strncmp(type, "vnd.ms-excel", 12) == 0)
-				return 1;
-		}
-		break;
-	case 'o':
-		if (strncmp(type, "octet-stream", 12) == 0)
-			return 1;
-		break;
-	}
-
-	return 0;
 }
 
 static inline void filter_from(const char *from)
@@ -606,7 +525,6 @@ static void check_one_name_from(char *subject, char *from)
 	}
 
 	action = 'S';
-	run_bogofilter(tmp_path, "-s");
 	spam();
 }
 
@@ -642,11 +560,6 @@ static void filter(void)
 		exit(0);
 	}
 
-	/* Also filter sender. This is mainly for mailing lists but can
-	 * also catch people who fake the from.
-	 */
-	filter_from(sender);
-
 	while (fgets(buff, sizeof(buff), fp)) {
 		if (*buff == '\n')
 			break; /* end of header */
@@ -674,42 +587,24 @@ static void filter(void)
 				folder_match = e->folder;
 		} else if (strncasecmp(buff, "Date:", 5) == 0)
 			flags |= SAW_DATE;
-		else if (strncasecmp(buff, "Content-Type:", 13) == 0) {
-			if (check_type(buff + 13))
-				flags |= SAW_APP;
-		} else if (strncasecmp(buff, "List-Post:", 10) == 0) {
+		else if (strncasecmp(buff, "List-Post:", 10) == 0) {
 			if ((e = list_filter(buff, folderlist)))
 				folder_match = e->folder;
+		} else if (strncasecmp(buff, "Return-Path:", 12) == 0) {
+			filter_from(buff);
 		}
 	}
 
-	if (drop_apps && !(flags & SAW_APP))
-		while (fgets(buff, sizeof(buff), fp))
-			if (strncasecmp(buff, "Content-Type:", 13) == 0)
-				if (check_type(buff + 13)) {
-					flags |= SAW_APP;
-					break;
-				}
-
 	fclose(fp);
-
-	if (!train_bogo)
-		/* Just check the mail... do not update the word lists */
-		if (run_bogofilter(tmp_path, "") == 0)
-			flags |= BOGO_SPAM;
 
 	/* Rule 1 */
 	if (flags & IS_IGNORED) {
-		/* Tell bogofilter this is ham */
 		action = 'I';
-		run_bogofilter(tmp_path, "-n");
 		ignore();
 	}
 	/* Rule 2 */
 	if (flags & IS_HAM) {
-		/* Tell bogofilter this is ham */
 		action = 'H';
-		run_bogofilter(tmp_path, "-n");
 		ham();
 	}
 	/* Rule 3, 4, 6 */
@@ -718,77 +613,40 @@ static void filter(void)
 		(flags & SAW_FROM) == 0 || (flags & SAW_DATE) == 0 ||
 		/* Rule 7 */
 		(run_drop && (flags & IS_ME) == 0)) {
-		/* Tell bogofilter this is spam */
 		action = 'S';
-		run_bogofilter(tmp_path, "-s");
 		spam();
-	}
-	/* Rule 8 */
-	if (drop_apps && (flags & SAW_APP)) {
-		action = 'D';
-		run_bogofilter(tmp_path, "-s");
-		drop();
 	}
 
 	/* SAM HACK */
 	check_one_name_from(subject, from);
 
 	action = 'h';
-	run_bogofilter(tmp_path, "-n");
 	ham();
-}
-
-static int setup_file(const char *fname)
-{
-	if (*fname != '/') {
-		printf("File must be fully rooted!\n");
-		exit(1);
-	}
-
-	/* tmp_path is just fname */
-	snprintf(tmp_path, sizeof(tmp_path), "%s", fname);
-
-	/* tmp_file must be the raw basename */
-	char *p = strrchr(fname, '/');
-	snprintf(tmp_file, sizeof(tmp_file), "%s", p + 1);
-	p = strchr(tmp_file, ':');
-	if (p)
-		*p = '\0';
-
-	return 0;
 }
 
 static void usage(void)
 {
-	puts("usage:\trtf [-abcdfnCT] [-l logfile] [-F file]\n"
-		 "where:\t-a   drop emails with app attachments\n"
-		 "\t-b   run bogofilter\n"
-		 "\t-c   add blacklist counts to logfile\n"
+	puts("usage:\trtf [-cdnC] [-l logfile] [-F file]\n"
+		 "where:\t-c   add blacklist counts to logfile\n"
 		 "\t-d   mark emails not 'from me' as spam\n"
 		 "\t-h   this help\n"
 		 "\t-n   dry run (mainly used with -F)\n"
 		 "\t-C   just check the config file\n"
 		 "\t     validates any regular expressions\n"
-		 "\t-F   mainly for debugging rtf\n"
-		 "\t-T   train bogofilter"
 		);
 }
 
 int main(int argc, char *argv[])
 {
 	int c, rc;
-	while ((c = getopt(argc, argv, "abcdhl:nCF:T")) != EOF)
+	while ((c = getopt(argc, argv, "cdhl:nC")) != EOF)
 		switch (c) {
-		case 'a': ++drop_apps; break;
-		case 'b': run_bogo = 1; break;
 		case 'c': add_blacklist = 1; break;
 		case 'd': run_drop = 1; break;
 		case 'h': usage(); exit(0);
 		case 'l': logfile = optarg; break;
 		case 'n': dry_run = 1; break;
 		case 'C': just_checking = 1; break;
-		case 'F': file_mode = optarg; break;
-		case 'T': train_bogo = run_bogo = 1; break;
 		}
 
 	home = getenv("HOME");
@@ -801,20 +659,7 @@ int main(int argc, char *argv[])
 	if (just_checking)
 		return rc;
 
-	if (file_mode)
-		sender = "good-sender";
-	else {
-		sender = getenv("SENDER");
-		if (!sender) {
-			syslog(LOG_ERR, "Email with no sender!");
-			return 0;
-		}
-	}
-
-	if (file_mode)
-		rc = setup_file(file_mode);
-	else
-		rc = create_tmp_file();
+	rc = create_tmp_file();
 
 	if (rc < 0)
 		return 0; /* continue */
