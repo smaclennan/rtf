@@ -12,6 +12,7 @@
 #include <syslog.h>
 #include <errno.h>
 #include <time.h>
+#include <regex.h>
 #include <sys/file.h>
 #include <sys/stat.h>
 
@@ -40,7 +41,32 @@
 
 /* imap-rtf only */
 
+// config.c
+struct entry {
+	const char *str;
+	const char *folder;
+	regex_t *reg;
+	struct entry *next;
+};
+
+extern struct entry *global;
+extern struct entry *melist;
+extern struct entry *fromlist;
+extern struct entry *whitelist;
+extern struct entry *blacklist;
+extern struct entry *ignorelist;
+extern struct entry *folderlist;
+
+const char *get_global(const char *glob);
+int get_global_num(const char *glob);
+int read_config(void);
+void read_last_seen(void);
+void write_last_seen(void);
+
 // imap-rtf.c
+extern int just_checking;
+extern const char *home;
+
 void logmsg(const char *fmt, ...);
 
 // bear.c
@@ -55,7 +81,7 @@ extern unsigned last_seen;
 int connect_to_server(const char *server, int port,
 					  const char *user, const char *passwd);
 int process_list(void);
-char *getline(char *buf, int len);
+char *fetchline(char *buf, int len);
 
 
 #endif

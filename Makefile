@@ -24,7 +24,7 @@ all: rtf imap-rtf learnem rtfsort regex-check
 rtf: rtf.c
 	$(CC) $(CFLAGS) -o $@ $< $(LIBS)
 
-imap-rtf: imap-rtf.c bear.c eyemap.c
+imap-rtf: imap-rtf.c bear.c eyemap.c config.c
 	$(CC) $(CFLAGS) -o $@ $+ $(LIBS)
 
 tarball:

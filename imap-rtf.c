@@ -73,12 +73,11 @@
 
 #include "rtf.h"
 #include <sys/wait.h>
-#include <regex.h>
 
 static int run_drop;
-static int just_checking;
+int just_checking;
 static const char *logfile;
-static const char *home;
+const char *home;
 /* We only print the first 42 chars of subject */
 static char subject[48] = { 'N', 'O', 'N', 'E' };
 static char action = '?';
@@ -88,22 +87,7 @@ static int use_stderr;
 static int dry_run;
 
 static unsigned flags;
-
-struct entry {
-	const char *str;
-	const char *folder;
-	regex_t *reg;
-	struct entry *next;
-};
-
-static struct entry *global;
-static struct entry *melist;
-static struct entry *fromlist;
-static struct entry *whitelist;
-static struct entry *blacklist;
-static struct entry *ignorelist;
-static struct entry *folderlist;
-static const  char *folder_match;
+static const char *folder_match;
 
 static const struct entry *saw_bl[2];
 static int add_blacklist;
@@ -179,233 +163,9 @@ void logmsg(const char *fmt, ...)
 		syslog(LOG_INFO, "%s", msg);
 }
 
-static int globals;
-
-static int add_global(struct entry *new, char *str)
-{
-	char *p = strchr(str, '=');
-
-	if (!p) {
-		if (just_checking)
-			printf("Bad global line '%s'\n", str);
-		else
-			syslog(LOG_WARNING, "Bad global line '%s'", str);
-		return 1;
-	}
-
-	*p++ = 0;
-	if (strcmp(str, "server") == 0)
-		globals |= 1;
-	else if (strcmp(str, "user") == 0)
-		globals |= 2;
-	else if (strcmp(str, "passwd") == 0)
-		globals |= 4;
-	else if (strcmp(str, "port") == 0)
-		globals |= 8;
-	else {
-		if (just_checking)
-			printf("Unknown global '%s'\n", str);
-		else
-			syslog(LOG_WARNING, "Unknown global '%s'", str);
-		return 1;
-	}
-
-	new->str = strdup(str);
-	new->folder = strdup(p);
-	if (!new->str || !new->folder) {
-		syslog(LOG_ERR, "Out of memory.");
-		return 1; /* not fatal */
-	}
-
-	new->next = global;
-	global = new;
-	return 0;
-}
-
-static const char *get_global(const char *glob)
-{
-	for (struct entry *e = global; e; e = e->next)
-		if (strcmp(e->str, glob) == 0)
-			return e->folder;
-	return "bogus";
-}
-
-static int get_global_num(const char *glob)
-{
-	return strtoul(get_global(glob), NULL, 10);
-}
-
-static int add_folder(struct entry *new, char *str)
-{
-	char *p = strchr(str, ',');
-
-	if (just_checking) {
-		if (!p)
-			printf("Bad folder line '%s'\n", str);
-#if IMAP_CHANGE
-		else {
-			char path[PATH_SIZE];
-			snprintf(path, sizeof(path) - strlen(tmp_file), "%s/Maildir/%s/new", home, p + 1);
-			if (access(path, F_OK))
-				printf("Bad folder %s\n", path);
-			return 0;
-		}
-#endif
-	}
-
-	if (!p) {
-		syslog(LOG_WARNING, "folder line missing , '%s'", str);
-		return 1;
-	}
-
-	*p++ = 0;
-	new->str = strdup(str);
-	new->folder = strdup(p);
-	if (!new->str || !new->folder) {
-		syslog(LOG_ERR, "Out of memory.");
-		return 1; /* not fatal */
-	}
-
-	new->next = folderlist;
-	folderlist = new;
-	return 0;
-}
-
-static int add_entry(struct entry **head, char *str)
-{
-	struct entry *new = calloc(1, sizeof(struct entry));
-	if (!new) goto oom;
-
-	if (head == &global)
-		return add_global(new, str);
-	if (head == &folderlist)
-		return add_folder(new, str);
-
-	if (*str == '+') {
-		new->reg = malloc(sizeof(regex_t));
-		if (!new->reg) goto oom;
-
-		int rc = regcomp(new->reg, str + 1, REGEXP_FLAGS);
-		if (rc) {
-			char err[80];
-
-			regerror(rc, new->reg, err, sizeof(err));
-			if (just_checking)
-				printf("%s: %s\n", str, err);
-			else
-				syslog(LOG_WARNING, "Bad regexp '%s': %s", str, err);
-			free(new->reg);
-			free(new);
-			return 1;
-		}
-	}
-
-	if (!(new->str = strdup(str)))
-		goto oom;
-
-	new->next = *head;
-	*head = new;
-	return 0;
-
-oom:
-	syslog(LOG_ERR, "Out of memory.");
-	exit(0);
-}
-
 static void blacklist_count(const struct entry *e, int index)
 {
 	saw_bl[index] = e;
-}
-
-static int read_config(void)
-{
-	char fname[PATH_SIZE];
-	struct entry **head = NULL;
-	int rc = 0;
-
-	snprintf(fname, sizeof(fname), "%s/.rtf", home);
-
-	FILE *fp = fopen(fname, "r");
-	if (!fp) {
-		if (errno != ENOENT) {
-			perror(fname);
-			syslog(LOG_WARNING, "%s: %m", fname);
-		}
-		return 1;
-	}
-
-	char line[128];
-	while (fgets(line, sizeof(line), fp)) {
-		char *p = strtok(line, "\r\n");
-		if (!p || *p == '#')
-			continue;
-		if (*line == '[') {
-			if (strcmp(line, "[global]") == 0)
-				head = &global;
-			else if (strcmp(line, "[whitelist]") == 0)
-				head = &whitelist;
-			else if (strcmp(line, "[blacklist]") == 0)
-				head = &blacklist;
-			else if (strcmp(line, "[ignore]") == 0)
-				head = &ignorelist;
-			else if (strcmp(line, "[me]") == 0)
-				head = &melist;
-			else if (strcmp(line, "[fromlist]") == 0)
-				head = &fromlist;
-			else if (strcmp(line, "[folders]") == 0)
-				head = &folderlist;
-			else {
-				syslog(LOG_INFO, "Unexpected: %s\n", line);
-				head = NULL;
-			}
-		} else if (head)
-			rc |= add_entry(head, line);
-	}
-
-	fclose(fp);
-
-	if ((globals & 15) != 15) {
-		if (just_checking) {
-			printf("Missing required globals\n");
-			rc = 1;
-		} else {
-			syslog(LOG_ERR, "Missing required globals\n");
-			exit(1);
-		}
-	}
-
-	return rc;
-}
-
-static void write_last_seen(void)
-{
-	char path[100];
-
-	snprintf(path, sizeof(path), "%s/.last-seen", home);
-	FILE *fp = fopen(path, "w");
-	fprintf(fp, "%u\n", last_seen);
-	fclose(fp);
-}
-
-static void read_last_seen(void)
-{
-	char path[100], buf[32];
-
-	snprintf(path, sizeof(path), "%s/.last-seen", home);
-	int fd = open(path, O_RDONLY);
-	if (fd < 0)
-		return;
-	int n = read(fd, buf, sizeof(buf));
-	close(fd);
-
-	if (n > 0)
-		last_seen = strtol(buf, NULL, 10);
-	else {
-		logmsg("Unable to read .last-seen");
-		last_seen = 1;
-	}
-
-	atexit(write_last_seen);
 }
 
 static void _safe_rename(const char *path)
@@ -558,7 +318,7 @@ static void filter(void)
 		exit(0);
 	}
 
-	while (getline(buff, sizeof(buff))) {
+	while (fetchline(buff, sizeof(buff))) {
 //		if (*buff == '\n')
 //			break; /* end of header */
 		if (strncasecmp(buff, "To:", 3) == 0 ||
