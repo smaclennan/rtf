@@ -6,3 +6,5 @@ regex-check
 rtf.log
 TAGS
 *.tar.gz
+BearSSL
+debug

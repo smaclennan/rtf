@@ -5,10 +5,16 @@ CFLAGS += -Wall $(D:1=-g)
 CFLAGS += -I/usr/local/include
 
 WANT_FORWARDING=0
+WANT_BEARSSL=1
 
 ifeq ($(WANT_FORWARDING),1)
 CFLAGS += -DWANT_FORWARDING
 LIBS += -L/usr/local/lib -lcurl
+endif
+
+ifeq ($(WANT_BEARSSL),1)
+CFLAGS += -I./BearSSL/inc
+LIBS += ./BearSSL/build/libbearssl.a
 endif
 
 VERSION=1.1
@@ -18,8 +24,8 @@ all: rtf imap-rtf learnem rtfsort regex-check
 rtf: rtf.c
 	$(CC) $(CFLAGS) -o $@ $< $(LIBS)
 
-imap-rtf: imap-rtf.c
-	$(CC) $(CFLAGS) -o $@ $< $(LIBS)
+imap-rtf: imap-rtf.c bear.c
+	$(CC) $(CFLAGS) -o $@ $+ $(LIBS)
 
 tarball:
 	rm -rf rtf-$(VERSION)
