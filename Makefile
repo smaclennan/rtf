@@ -4,7 +4,7 @@ D = -O2
 CFLAGS += -Wall $(D:1=-g)
 CFLAGS += -I/usr/local/include
 
-WANT_FORWARDING=1
+WANT_FORWARDING=0
 
 ifeq ($(WANT_FORWARDING),1)
 CFLAGS += -DWANT_FORWARDING
@@ -13,10 +13,13 @@ endif
 
 VERSION=1.1
 
-all: rtf learnem rtfsort regex-check
+all: rtf imap-rtf learnem rtfsort regex-check
 
 rtf: rtf.c
-	$(CC) $(CFLAGS) -o $@ rtf.c $(LIBS)
+	$(CC) $(CFLAGS) -o $@ $< $(LIBS)
+
+imap-rtf: imap-rtf.c
+	$(CC) $(CFLAGS) -o $@ $< $(LIBS)
 
 tarball:
 	rm -rf rtf-$(VERSION)
