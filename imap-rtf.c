@@ -74,6 +74,7 @@
 #include "rtf.h"
 #include <sys/wait.h>
 
+int verbose;
 static int run_drop;
 int just_checking;
 static const char *logfile;
@@ -99,8 +100,6 @@ static char buff[8096];
  */
 #define PATH_SIZE 144
 
-static char tmp_file[84], tmp_path[PATH_SIZE];
-
 /* Called at exit() */
 static void logit(void)
 {
@@ -120,7 +119,7 @@ static void logit(void)
 
 #define OUT(a, c) ((flags & (a)) ? (c) : '-')
 	/* Last two flags are for learnem */
-	fprintf(fp, "%-20s %c%c%c%c%c%c%c%c--%c %c %.42s\n", tmp_file,
+	fprintf(fp, "%10u %c%c%c%c%c%c%c%c--%c %c %.42s\n", cur_uid,
 			OUT(IS_ME, 'M'), OUT(SAW_FROM, 'F'), OUT(SAW_DATE, 'D'),
 			OUT(IS_HAM, 'H'), OUT(IS_IGNORED, 'I'), OUT(IS_SPAM, 'S'),
 			OUT(FROM_ME, 'f'), OUT(BOGO_SPAM, 'B'),
@@ -131,7 +130,7 @@ static void logit(void)
 
 		for (i = 0; i < 2; ++i)
 			if (saw_bl[i])
-				fprintf(fp, "%-20s B%c-----%c--- %c %.42s\n", tmp_file,
+				fprintf(fp, "%10u B%c-----%c--- %c %.42s\n", cur_uid,
 						i ? 'S' : 'F', OUT(BOGO_SPAM, 'B'),
 						action, saw_bl[i]->str);
 	}
@@ -168,46 +167,20 @@ static void blacklist_count(const struct entry *e, int index)
 	saw_bl[index] = e;
 }
 
-static void _safe_rename(const char *path)
+static void safe_rename(const char *path)
 {
 	if (dry_run) {
 		printf("Action %c\n", action);
 		exit(0);
 	}
-	if (rename(tmp_path, path)) {
-		syslog(LOG_WARNING, "%s: %m", path);
-		unlink(tmp_path);
-		exit(0); /* continue */
-	}
+	imap_move(path);
 }
 
-static void ham(void)
-{
-	char path[PATH_SIZE];
+static inline void ham(void) { /* nop */ }
 
-	if (folder_match) {
-		action = 'f';
-		snprintf(path, sizeof(path), "%s/Maildir/%s/new/%s", home, folder_match, tmp_file);
-	} else
-		snprintf(path, sizeof(path), "%s/Maildir/new/%s", home, tmp_file);
+static inline void spam(void) { safe_rename("Spam"); }
 
-	_safe_rename(path);
-	exit(99); /* don't continue - we handled it */
-}
-
-static void safe_rename(const char *subdir)
-{
-	char path[PATH_SIZE];
-	snprintf(path, sizeof(path), "%s/Maildir/%s/cur/%s:2,S", home, subdir, tmp_file);
-	_safe_rename(path);
-	exit(99); /* don't continue - we handled it */
-}
-
-static inline void spam(void) { safe_rename(SPAM_DIR); }
-
-static inline void ignore(void) { safe_rename(IGNORE_DIR); }
-
-static inline void drop(void) { safe_rename(DROP_DIR); }
+static inline void ignore(void) { safe_rename("Ignore"); }
 
 static const struct entry *list_filter(const char *line, struct entry * const head)
 {
@@ -307,16 +280,10 @@ static void normalize_subject(const char *str)
 	subject[end + 1] = 0;
 }
 
-static void filter(void)
+void filter(void)
 {
 	const struct entry *e;
 	char *from = NULL;
-	FILE *fp = fopen(tmp_path, "r");
-	if (!fp) {
-		syslog(LOG_WARNING, "%s: %m", tmp_path);
-		unlink(tmp_path);
-		exit(0);
-	}
 
 	while (fetchline(buff, sizeof(buff))) {
 //		if (*buff == '\n')
@@ -352,8 +319,6 @@ static void filter(void)
 			filter_from(buff);
 		}
 	}
-
-	fclose(fp);
 
 	/* Rule 1 */
 	if (flags & IS_IGNORED) {
@@ -406,13 +371,14 @@ static void usage(void)
 int main(int argc, char *argv[])
 {
 	int c, rc;
-	while ((c = getopt(argc, argv, "cdhl:nC")) != EOF)
+	while ((c = getopt(argc, argv, "cdhl:nvC")) != EOF)
 		switch (c) {
 		case 'c': add_blacklist = 1; break;
 		case 'd': run_drop = 1; break;
 		case 'h': usage(); exit(0);
 		case 'l': logfile = optarg; break;
 		case 'n': dry_run = 1; break;
+		case 'v': ++verbose; break;
 		case 'C': just_checking = 1; break;
 		}
 
@@ -426,8 +392,7 @@ int main(int argc, char *argv[])
 	if (just_checking)
 		return rc;
 
-	read_last_seen();
-
+	// SAM FIXME
 	if (logfile)
 		atexit(logit);
 
@@ -441,7 +406,6 @@ int main(int argc, char *argv[])
 
 		ssl_close();
 		close(sock);
-		write_last_seen();
 
 		if (dry_run)
 			exit(42);

@@ -60,13 +60,14 @@ extern struct entry *folderlist;
 const char *get_global(const char *glob);
 int get_global_num(const char *glob);
 int read_config(void);
-void read_last_seen(void);
-void write_last_seen(void);
 
 // imap-rtf.c
+extern int verbose;
 extern int just_checking;
 extern const char *home;
+extern unsigned cur_uid;
 
+void filter(void);
 void logmsg(const char *fmt, ...);
 
 // bear.c
@@ -76,12 +77,11 @@ int ssl_write(const char *buffer, int len);
 int ssl_close(void);
 
 // eyemap.c
-extern unsigned last_seen;
-
 int connect_to_server(const char *server, int port,
 					  const char *user, const char *passwd);
 int process_list(void);
 char *fetchline(char *buf, int len);
+int imap_move(const char *to);
 
 
 #endif

@@ -21,10 +21,40 @@
 #define LOGIN "seanm@seanm.ca"
 #define PASSWD "fcpdkj04xv"
 
-unsigned last_seen;
+static unsigned last_seen;
 
-char buf[BR_SSL_BUFSIZE_INPUT + 1];
-int cmdno;
+static char buf[BR_SSL_BUFSIZE_INPUT + 1];
+static char *curline;
+static int cmdno;
+
+static void write_last_seen(void)
+{
+	char path[100];
+
+	snprintf(path, sizeof(path), "%s/.last-seen", home);
+	FILE *fp = fopen(path, "w");
+	fprintf(fp, "%u\n", last_seen);
+	fclose(fp);
+}
+
+static void read_last_seen(void)
+{
+	char path[100], buf[32];
+
+	snprintf(path, sizeof(path), "%s/.last-seen", home);
+	int fd = open(path, O_RDONLY);
+	if (fd < 0)
+		return;
+	int n = read(fd, buf, sizeof(buf));
+	close(fd);
+
+	if (n > 0)
+		last_seen = strtol(buf, NULL, 10);
+	else {
+		logmsg("Unable to read .last-seen");
+		last_seen = 1;
+	}
+}
 
 static int send_recv(const char *fmt, ...)
 {
@@ -52,8 +82,8 @@ static int send_recv(const char *fmt, ...)
 	n = ssl_read(buf, sizeof(buf) - 1);
 	if (n > 0) {
 		buf[n] = 0;
-		// printf("read %d\n%s\n", n, buf); // SAM DBG
-		if (strstr(buf, match))
+		if (verbose > 1)
+			printf("read %d\n%s\n", n, buf);if (strstr(buf, match))
 			return 0;
 	}
 
@@ -64,6 +94,8 @@ static int fetch(int uid)
 {
 	char match[16];
 	int n;
+
+	curline = buf;
 
 	++cmdno;
 	n = sprintf(buf, "a%03d UID FETCH %d (BODY.PEEK[HEADER])\r\n", cmdno, uid);
@@ -136,10 +168,24 @@ static int fetch(int uid)
 	sprintf(match, "a%03d OK", cmdno);
 	printf("<%s>", p); // SAM DBG
 	if (strncmp(p, match, strlen(match))) {
+		printf("FAILED\n");
 		return -1;
 	}
 
 	return 0;
+}
+
+char *fetchline(char *line, int len)
+{
+	if (!curline)
+		return NULL;
+
+	char *end = strchr(curline, '\n');
+	if (end)
+		*end++ = 0;
+	snprintf(line, len, "%s", curline); // SAM strlcpy
+	curline = end;
+	return line;
 }
 
 #define MAX_UIDS 100
@@ -148,35 +194,57 @@ static int n_uids;
 
 static int build_list(void)
 {
-	if (send_recv("UID SEARCH UID %d:*", last_seen)) {
-		printf("Search failed\n");
+	n_uids = 0;
+
+	/* We cannot wildcard the end because 1995:* will match 1994 */
+	if (send_recv("UID SEARCH UID %u:%u", last_seen, last_seen + MAX_UIDS)) {
+		printf("Search failed\n"); // SAM DBG
 		return -1;
 	}
 
-	n_uids = 0;
-	for (char *p = buf; (p = strstr(p, "* SEARCH")); ) {
-		if (n_uids < MAX_UIDS) {
-			uidlist[n_uids++] = strtol(p + 8, &p, 10);
-		}
-	}
+	for (char *p = buf; (p = strstr(p, "* SEARCH")); )
+		uidlist[n_uids++] = strtol(p + 8, &p, 10);
 
 	return n_uids;
 }
 
+// Needed for logging
+unsigned cur_uid;
+
+int imap_move(const char *to)
+{
+	if (send_recv("UID COPY %u %s", cur_uid, to))
+		return -1;
+
+	return send_recv("UID STORE %u +FLAGS.SILENT (\\Deleted \\Seen)", cur_uid);
+}
+
 int process_list(void)
 {
+	int did_something = 0;
+
 	do {
-		build_list();
+		if (build_list() < 0)
+			return -1;
 
 		for (int i = 0; i < n_uids; ++i) {
-			if (fetch(uidlist[i]))
+			cur_uid = uidlist[i];
+			printf("Fetch %u\n", cur_uid);
+
+			if (fetch(cur_uid)) {
+				puts("FAILED"); // SAM DBG
 				return -1;
+			}
 
-			// filter();
+			filter();
 
-			last_seen = uidlist[i] + 1;
+			last_seen = cur_uid + 1;
+			++did_something;
 		}
 	} while (n_uids);
+
+	if (did_something)
+		write_last_seen();
 
 	return 0;
 }
@@ -233,6 +301,12 @@ again:
 		goto failed2;
 	}
 
+	if (last_seen == 0)
+		read_last_seen();
+
+	if (verbose)
+		printf("Connected. Last seen %u\n", last_seen);
+
 	return sock; // connected
 
 failed2:
@@ -241,24 +315,3 @@ failed:
 	close(sock);
 	goto again;
 }
-
-/*
-int main(int argc, char *argv[])
-{
-	int sock = connect_to_server(IMAP_SERVER, IMAP_PORT, LOGIN, PASSWD);
-
-	if (build_list() < 0)
-		goto done;
-
-	for (int i = 0; i < n_uids; ++i) {
-		if (process_one(uidlist[i]) < 0)
-			goto done;
-	}
-
-done:
-	ssl_close();
-	close(sock);
-
-	return 0;
-}
-*/

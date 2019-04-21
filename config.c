@@ -201,34 +201,3 @@ int read_config(void)
 
 	return rc;
 }
-
-void write_last_seen(void)
-{
-	char path[100];
-
-	snprintf(path, sizeof(path), "%s/.last-seen", home);
-	FILE *fp = fopen(path, "w");
-	fprintf(fp, "%u\n", last_seen);
-	fclose(fp);
-}
-
-void read_last_seen(void)
-{
-	char path[100], buf[32];
-
-	snprintf(path, sizeof(path), "%s/.last-seen", home);
-	int fd = open(path, O_RDONLY);
-	if (fd < 0)
-		return;
-	int n = read(fd, buf, sizeof(buf));
-	close(fd);
-
-	if (n > 0)
-		last_seen = strtol(buf, NULL, 10);
-	else {
-		logmsg("Unable to read .last-seen");
-		last_seen = 1;
-	}
-
-	atexit(write_last_seen);
-}
