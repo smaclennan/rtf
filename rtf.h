@@ -37,4 +37,18 @@
 
 #define REGEXP_FLAGS (REG_EXTENDED | REG_ICASE | REG_NEWLINE)
 
+/* imap-rtf only */
+
+// bear.c
+int ssl_open(int sock, const char *host);
+int ssl_read(char *buffer, int len);
+int ssl_write(const char *buffer, int len);
+int ssl_close(void);
+
+// eyemap.c
+int connect_to_server(const char *server, int port,
+					  const char *user, const char *passwd);
+int build_list(void);
+
+
 #endif

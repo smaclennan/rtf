@@ -65,7 +65,6 @@
  *
  * Other features:
  *
- * - mail forwarding
  * - folders
  */
 
@@ -84,7 +83,6 @@ static int run_bogo;
 static int train_bogo;
 static int run_drop;
 static int drop_apps;
-static int forward;
 static int just_checking;
 static const char *logfile;
 static const char *home;
@@ -119,8 +117,6 @@ static struct entry *fromlist;
 static struct entry *whitelist;
 static struct entry *blacklist;
 static struct entry *ignorelist;
-static struct entry *forwardlist;
-static struct entry *forwardfilter;
 static struct entry *folderlist;
 static const  char *folder_match;
 
@@ -135,177 +131,6 @@ static char buff[8096];
 #define PATH_SIZE 144
 
 static char tmp_file[84], tmp_path[PATH_SIZE];
-
-#ifdef WANT_FORWARDING
-#include <curl/curl.h>
-
-#define LINE_SIZE 4096
-
-struct user_data {
-	const char *fname;
-	FILE *fp;
-	int output;
-};
-
-static size_t read_callback(char *output, size_t size, size_t nmemb, void *datap)
-{
-	struct user_data *data = datap;
-	int ch;
-	size_t n = 0;
-
-	/* I have always seen size == 1 */
-	if (size == 1)
-		size = nmemb;
-	else
-		size *= nmemb;
-	if (size > 0)
-		--size; /* we need room for possible \r\n */
-
-	if (data->output == 0) {
-		/* We need to find the first "real" header line */
-		while (fgets(output, size, data->fp))
-			if (!isspace(*output) &&
-				strncmp(output, "Received:", 9) &&
-				strncmp(output, "Return-Path:", 12) &&
-				strncmp(output, "Delivered-To:", 13)) {
-				data->output = 1;
-				char *p = strchr(output, '\n');
-				if (p) *p = 0;
-				strcat(output, "\r\n");
-				n = strlen(output);
-				output += n;
-				break;
-			}
-	}
-
-	while (n < size && (ch = fgetc(data->fp)) != EOF) {
-		if (ch == '\n') {
-			*output++ = '\r';
-			++n;
-		}
-		*output++ = ch;
-		++n;
-	}
-
-	return n;
-}
-
-static void forward_log(void)
-{
-#if 1
-	char fname[256], *p;
-
-	if (!logfile) {
-		syslog(LOG_INFO, "No logfile"); // SAM DBG
-		return;
-	}
-
-	snprintf(fname, sizeof(fname) - 11, "%s", logfile);
-	p = strrchr(fname, '/');
-	if (p) {
-		strcpy(p, "/forward.log");
-		FILE *fp = fopen(fname, "a");
-		if (fp) {
-			fprintf(fp, "%s\n", sender);
-			fclose(fp);
-		} else
-			syslog(LOG_INFO, "%s: %m", fname); // SAM DBG
-	} else
-		syslog(LOG_INFO, "%s: invalid", logfile); // SAM DBG
-#endif
-}
-
-static int forward_filter(void)
-{
-	struct entry *ff;
-
-	for (ff = forwardfilter; ff; ff = ff->next)
-		if (strcasestr(sender, ff->str))
-			return 1;
-
-	return 0;
-}
-
-static int filter_to(const char *to)
-{   /* sanitize the to */
-	char sane[1024], *p;
-
-	snprintf(sane, sizeof(sane), "%s", to);
-	if ((p = strrchr(sane, '>'))) *p = 0;
-	p = *sane == '<' ? sane + 1 : sane;
-	return strcmp(p, sender) == 0;
-}
-
-static void do_forward(const char *fname)
-{
-	CURL *curl = NULL;
-	struct curl_slist *recipients = NULL;
-	struct entry *e;
-	int ok = 1; /* we currently always have sender */
-	struct user_data upload_ctx;
-	CURLcode res;
-	char from[128];
-
-	if (forward_filter())
-		return;
-
-	upload_ctx.fname = fname;
-	upload_ctx.output = 0;
-	upload_ctx.fp = fopen(fname, "r");
-	if (!upload_ctx.fp) {
-		syslog(LOG_ERR, "tmpfile %s: %m", fname);
-		return;
-	}
-
-	curl = curl_easy_init();
-	if(!curl) {
-		syslog(LOG_ERR, "Unable to initialize curl");
-		goto cleanup;
-	}
-
-	/* parse the forward list */
-	for (e = forwardlist; e; e = e->next)
-		if (strncmp(e->str, "smtp=", 5) == 0) {
-			curl_easy_setopt(curl, CURLOPT_URL, e->str + 5);
-			ok |= 2;
-		} else if (strncmp(e->str, "to=", 3) == 0) {
-			recipients = curl_slist_append(recipients, e->str + 3);
-			ok |= 4;
-			if (filter_to(e->str + 3))
-				goto cleanup;
-		}
-
-	if (ok != 7) {
-		syslog(LOG_ERR, "Invalid configuraton: %d", ok);
-		goto cleanup;
-	}
-
-	curl_easy_setopt(curl, CURLOPT_MAIL_RCPT, recipients);
-
-	snprintf(from, sizeof(from), "<%s>", sender);
-	curl_easy_setopt(curl, CURLOPT_MAIL_FROM, from);
-
-	curl_easy_setopt(curl, CURLOPT_READFUNCTION, read_callback);
-	curl_easy_setopt(curl, CURLOPT_READDATA, &upload_ctx);
-	curl_easy_setopt(curl, CURLOPT_UPLOAD, 1L);
-
-	/* Send the message */
-	res = curl_easy_perform(curl);
-	if(res != CURLE_OK)
-		syslog(LOG_ERR, "curl_easy_perform() failed: %s", curl_easy_strerror(res));
-
-	flags |= FORWARD;
-
-	forward_log();
-
-cleanup:
-	fclose(upload_ctx.fp);
-	curl_slist_free_all(recipients);
-	curl_easy_cleanup(curl);
-}
-#else
-#define do_forward(f)
-#endif
 
 /* Should be NFS safe iff all hostnames are unique. */
 static int create_tmp_file(void)
@@ -582,10 +407,6 @@ static int read_config(void)
 				head = &melist;
 			else if (strcmp(line, "[fromlist]") == 0)
 				head = &fromlist;
-			else if (strcmp(line, "[forward]") == 0)
-				head = &forwardlist;
-			else if (strcmp(line, "[forward_filter]") == 0)
-				head = &forwardfilter;
 			else if (strcmp(line, "[folders]") == 0)
 				head = &folderlist;
 			else {
@@ -643,13 +464,6 @@ static void ham(void)
 		snprintf(path, sizeof(path), "%s/Maildir/%s/new/%s", home, folder_match, tmp_file);
 	} else
 		snprintf(path, sizeof(path), "%s/Maildir/new/%s", home, tmp_file);
-
-	/* We technically should forward after rename... but it is
-	 * racy to forward the "real" message but safe with the tmp
-	 * message.
-	 */
-	if (forward && !folder_match && !dry_run)
-		do_forward(tmp_path);
 
 	_safe_rename(path);
 	exit(99); /* don't continue - we handled it */
@@ -951,7 +765,6 @@ static void usage(void)
 		 "\t-b   run bogofilter\n"
 		 "\t-c   add blacklist counts to logfile\n"
 		 "\t-d   mark emails not 'from me' as spam\n"
-		 "\t-f   forward emails\n"
 		 "\t-h   this help\n"
 		 "\t-n   dry run (mainly used with -F)\n"
 		 "\t-C   just check the config file\n"
@@ -964,13 +777,12 @@ static void usage(void)
 int main(int argc, char *argv[])
 {
 	int c, rc;
-	while ((c = getopt(argc, argv, "abcdfhl:nCF:T")) != EOF)
+	while ((c = getopt(argc, argv, "abcdhl:nCF:T")) != EOF)
 		switch (c) {
 		case 'a': ++drop_apps; break;
 		case 'b': run_bogo = 1; break;
 		case 'c': add_blacklist = 1; break;
 		case 'd': run_drop = 1; break;
-		case 'f': forward = 1; break;
 		case 'h': usage(); exit(0);
 		case 'l': logfile = optarg; break;
 		case 'n': dry_run = 1; break;
