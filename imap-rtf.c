@@ -82,6 +82,7 @@ static const char *home;
 /* We only print the first 42 chars of subject */
 static char subject[48] = { 'N', 'O', 'N', 'E' };
 static char action = '?';
+static int use_stderr;
 
 /* For dry_run you probably want file mode too. */
 static int dry_run;
@@ -115,74 +116,6 @@ static char buff[8096];
 #define PATH_SIZE 144
 
 static char tmp_file[84], tmp_path[PATH_SIZE];
-
-/* Should be NFS safe iff all hostnames are unique. */
-static int create_tmp_file(void)
-{
-	char hostname[64];
-	if (gethostname(hostname, sizeof(hostname))) {
-		syslog(LOG_ERR, "Hostname: %m");
-		return -1;
-	}
-
-	const char *dtline = getenv("DTLINE");
-	const char *rpline = getenv("RPLINE");
-	if (!dtline || !rpline) {
-		syslog(LOG_ERR, "Missing required environment variables.");
-		return -1;
-	}
-
-	snprintf(tmp_file, sizeof(tmp_file), "%ld.%d.%s",
-			 time(NULL), getpid(), hostname);
-	snprintf(tmp_path, sizeof(tmp_path), "%s/Maildir/tmp/%s", home, tmp_file);
-	int fd = creat(tmp_path, 0644);
-	if (fd < 0) {
-		syslog(LOG_ERR, "%s: %m", tmp_path);
-		return -1;
-	}
-
-	/* Sanitize the environment variables */
-	const char *p;
-	for (p = rpline; *p; ++p)
-		if (isascii(*p))
-			if (write(fd, p, 1) != 1)
-				goto write_error;
-	for (p = dtline; *p; ++p)
-		if (isascii(*p))
-			if (write(fd, p, 1) != 1)
-				goto write_error;
-
-	/* Read the email */
-	int n;
-	while ((n = read(0, buff, sizeof(buff))) > 0)
-		if (write(fd, buff, n) != n)
-			goto write_error;
-
-	if (fsync(fd))
-		goto write_error;
-
-	if (close(fd)) {
-		fd = -1;
-		goto write_error;
-	}
-
-	if (n < 0)
-		goto read_error;
-
-	return 0;
-
-write_error:
-	syslog(LOG_ERR, "%s: write error", tmp_path);
-	if (fd != -1)
-		close(fd);
-	unlink(tmp_path);
-	return -1;
-
-read_error:
-	syslog(LOG_ERR, "%s: read error", tmp_path);
-	unlink(tmp_path);
-	return -1;
-}
 
 /* Called at exit() */
 static void logit(void)
@@ -223,6 +156,27 @@ static void logit(void)
 		syslog(LOG_ERR, "%s: write error", logfile);
 
 	fclose(fp);
+}
+
+static inline int write_string(char *str)
+{
+	strcat(str, "\n");
+	return write(2, str, strlen(str));
+}
+
+void logmsg(const char *fmt, ...)
+{
+	va_list ap;
+	char msg[128];
+
+	va_start(ap, fmt);
+	vsnprintf(msg, sizeof(msg) - 1, fmt, ap);
+	va_end(ap);
+
+	if (use_stderr)
+		write_string(msg);
+	else
+		syslog(LOG_INFO, "%s", msg);
 }
 
 static int globals;
@@ -266,6 +220,19 @@ static int add_global(struct entry *new, char *str)
 	new->next = global;
 	global = new;
 	return 0;
+}
+
+static const char *get_global(const char *glob)
+{
+	for (struct entry *e = global; e; e = e->next)
+		if (strcmp(e->str, glob) == 0)
+			return e->folder;
+	return "bogus";
+}
+
+static int get_global_num(const char *glob)
+{
+	return strtoul(get_global(glob), NULL, 10);
 }
 
 static int add_folder(struct entry *new, char *str)
@@ -408,6 +375,37 @@ static int read_config(void)
 	}
 
 	return rc;
+}
+
+static void write_last_seen(void)
+{
+	char path[100];
+
+	snprintf(path, sizeof(path), "%s/.last-seen", home);
+	FILE *fp = fopen(path, "w");
+	fprintf(fp, "%u\n", last_seen);
+	fclose(fp);
+}
+
+static void read_last_seen(void)
+{
+	char path[100], buf[32];
+
+	snprintf(path, sizeof(path), "%s/.last-seen", home);
+	int fd = open(path, O_RDONLY);
+	if (fd < 0)
+		return;
+	int n = read(fd, buf, sizeof(buf));
+	close(fd);
+
+	if (n > 0)
+		last_seen = strtol(buf, NULL, 10);
+	else {
+		logmsg("Unable to read .last-seen");
+		last_seen = 1;
+	}
+
+	atexit(write_last_seen);
 }
 
 static void _safe_rename(const char *path)
@@ -560,10 +558,10 @@ static void filter(void)
 		exit(0);
 	}
 
-	while (fgets(buff, sizeof(buff), fp)) {
-		if (*buff == '\n')
-			break; /* end of header */
-		else if (strncasecmp(buff, "To:", 3) == 0 ||
+	while (getline(buff, sizeof(buff))) {
+//		if (*buff == '\n')
+//			break; /* end of header */
+		if (strncasecmp(buff, "To:", 3) == 0 ||
 				 strncasecmp(buff, "Cc:", 3) == 0 ||
 				 strncasecmp(buff, "Bcc:", 4) == 0) {
 			if (list_filter(buff, whitelist))
@@ -624,6 +622,15 @@ static void filter(void)
 	ham();
 }
 
+static void run(void)
+{
+	while (1) {
+		if (process_list())
+			return;
+		sleep(60);
+	}
+}
+
 static void usage(void)
 {
 	puts("usage:\trtf [-cdnC] [-l logfile] [-F file]\n"
@@ -652,21 +659,31 @@ int main(int argc, char *argv[])
 	home = getenv("HOME");
 	if (!home) {
 		syslog(LOG_WARNING, "You are homeless!");
-		return 0; /* continue */
+		return 1;
 	}
 
 	rc = read_config();
 	if (just_checking)
 		return rc;
 
-	rc = create_tmp_file();
-
-	if (rc < 0)
-		return 0; /* continue */
+	read_last_seen();
 
 	if (logfile)
 		atexit(logit);
 
-	filter();
-	return 0; /* unreached */
+	while (1) {
+		int sock = connect_to_server(get_global("server"),
+									 get_global_num("port"),
+									 get_global("user"),
+									 get_global("passwd"));
+
+		run();
+
+		ssl_close();
+		close(sock);
+		write_last_seen();
+
+		if (dry_run)
+			exit(42);
+	}
 }

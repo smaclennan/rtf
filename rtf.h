@@ -4,6 +4,7 @@
 #define _GNU_SOURCE /* for strcasestr */
 #include <stdio.h>
 #include <stdlib.h>
+#include <stdarg.h>
 #include <string.h>
 #include <unistd.h>
 #include <fcntl.h>
@@ -39,6 +40,9 @@
 
 /* imap-rtf only */
 
+// imap-rtf.c
+void logmsg(const char *fmt, ...);
+
 // bear.c
 int ssl_open(int sock, const char *host);
 int ssl_read(char *buffer, int len);
@@ -46,9 +50,12 @@ int ssl_write(const char *buffer, int len);
 int ssl_close(void);
 
 // eyemap.c
+extern unsigned last_seen;
+
 int connect_to_server(const char *server, int port,
 					  const char *user, const char *passwd);
-int build_list(void);
+int process_list(void);
+char *getline(char *buf, int len);
 
 
 #endif
