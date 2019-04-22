@@ -25,7 +25,7 @@ rtf: rtf.c
 	$(CC) $(CFLAGS) -o $@ $< $(LIBS)
 
 imap-rtf: imap-rtf.c bear.c eyemap.c config.c
-	$(CC) $(CFLAGS) -o $@ $+ $(LIBS)
+	$(CC) $(CFLAGS) -DIMAP -o $@ $+ $(LIBS)
 
 tarball:
 	rm -rf rtf-$(VERSION)

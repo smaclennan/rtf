@@ -142,7 +142,6 @@ int ssl_timed_read(char *buffer, int len, int timeout)
 		}
 		if (rc == 0)
 			return 0; // timeout
-		puts("Hmmmm... poll returned -1"); // SAM DBG
 	}
 }
 

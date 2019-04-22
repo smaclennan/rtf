@@ -21,9 +21,9 @@
 #define LOGIN "seanm@seanm.ca"
 #define PASSWD "fcpdkj04xv"
 
-static unsigned last_seen;
+static unsigned last_seen = 1;
 
-static char buf[BR_SSL_BUFSIZE_INPUT + 1];
+static char buf[8 * 1024];
 static char *curline;
 static int cmdno;
 
@@ -50,10 +50,8 @@ static void read_last_seen(void)
 
 	if (n > 0)
 		last_seen = strtol(buf, NULL, 10);
-	else {
+	else
 		logmsg("Unable to read .last-seen");
-		last_seen = 1;
-	}
 }
 
 static int send_recv(const char *fmt, ...)
@@ -71,23 +69,29 @@ static int send_recv(const char *fmt, ...)
 		va_end(ap);
 		strcpy(buf + n, "\r\n");
 
+		if (verbose > 1) {
+			if (strncmp(fmt, "LOGIN", 5) == 0)
+				printf("C: LOGIN\n");
+			else
+				printf("C: %s", buf);
+		}
+
 		n = ssl_write(buf, n + 2);
 		if (n <= 0)
 			return -1;
 
-		if (strcmp(fmt, "IDLE") == 0)
-			strcpy(match, "+ idling");
-		else
-			sprintf(match, "a%03d OK", cmdno);
+		sprintf(match, "a%03d OK", cmdno);
 	} else
-		strcpy(match, "* OK IMAP");
+		strcpy(match, "* OK ");
 
 	n = ssl_read(buf, sizeof(buf) - 1);
 	if (n > 0) {
 		buf[n] = 0;
 		if (verbose > 1)
-			printf("read %d\n%s\n", n, buf);if (strstr(buf, match))
+			printf("S:%d: %s", n, buf);
+		if (strstr(buf, match))
 			return 0;
+		return 1;
 	}
 
 	return -1;
@@ -95,7 +99,7 @@ static int send_recv(const char *fmt, ...)
 
 static int fetch(int uid)
 {
-	char match[16];
+	char match[16], *p;
 	int n;
 
 	curline = buf;
@@ -107,12 +111,14 @@ static int fetch(int uid)
 	if (n <= 0)
 		return -1;
 
+#if 0
 	/* First read contains the size */
 	n = ssl_read(buf, sizeof(buf));
 	if (n <= 0)
 		return -1;
 	buf[n] = 0;
 
+	// SAM Exchange does not give a size
 	// SAM re?
 	char *p = strchr(buf, '{');
 	if (!p)
@@ -169,6 +175,34 @@ static int fetch(int uid)
 	}
 
 	return 0;
+#else
+	sprintf(match, "\na%03d ", cmdno);
+
+	while (1) {
+		// SAM buffer overflow
+		int got = ssl_read(buf + n, sizeof(buf) - 1 - n);
+		if (got > 0) {
+			n += got;
+			buf[n] = 0;
+			// printf("read %d\n%s\n", n, buf); // SAM DBG
+			// SAM HACK what if returns !OK?
+			if ((p = strstr(buf, match))) {
+				if (strncmp(p + strlen(match), "OK", 2) == 0) {
+					puts("GOOD");
+					return 0;
+				}
+				printf("Bad '%s'", p);
+				return 1; // keep going... assume it was dealt with
+			}
+		} else if(got == 0) {
+			perror("EOF");
+			return -1;
+		} else {
+			perror("read");
+			return -1;
+		}
+	}
+#endif
 }
 
 char *fetchline(char *line, int len)
@@ -265,6 +299,7 @@ int process_list(void)
 	return 0;
 }
 
+#define POLLING
 #ifdef POLLING
 void run(void)
 {
@@ -288,6 +323,7 @@ static char *nowtime(void)
 	return nowstr;
 }
 
+// SAM doesn't work with exchange
 void run(void)
 {
 	int n;
@@ -296,8 +332,13 @@ void run(void)
 	process_list();
 
 	while (1) {
-		if (send_recv("IDLE"))
+		int rc = send_recv("IDLE");
+		if (rc < 0)
 			return;
+		if (strstr(buf, "+ idling ") == NULL && // for compliant servers
+			strstr(buf, "+ IDLE ") == NULL) // for exchange
+			return;
+
 		printf(">>> %s IDLING\n", nowtime()); // SAM DBG
 
 		while (1) {
@@ -375,7 +416,7 @@ again:
 		goto failed2;
 	}
 
-	if (last_seen == 0)
+	if (last_seen == 1)
 		read_last_seen();
 
 	if (verbose)

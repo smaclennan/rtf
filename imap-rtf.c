@@ -209,49 +209,6 @@ static inline void filter_from(const char *from)
 		flags |= FROM_ME;
 }
 
-static int isok(char c)
-{
-	switch (c) {
-	case 'a'...'z':
-	case 'A'...'Z':
-	case '0'...'9':
-		return 1;
-	case '"':
-		return 1;
-	/* for mime decode e.g. =?utf-8?Q?Apple?= */
-	case '=':
-	case '?':
-	case '-':
-		return 1;
-	default:
-		return 0;
-	}
-}
-
-/* Check for a one name from */
-static int check_one_name_from(char *subject, char *from)
-{
-	from += 5; /* skip From: */
-	while (isspace(*from)) ++from;
-	while (isok(*from)) ++from;
-	while (isspace(*from)) ++from;
-	if (*from && *from != '<')
-		return 0;
-
-	/* We have a "one name" from */
-
-	if (add_blacklist) {
-		/* Add an entry to the blacklist count */
-		struct entry *e = calloc(1, sizeof(struct entry));
-		if (e) {
-			e->str = "one name";
-			blacklist_count(e, 1);
-		}
-	}
-
-	return 1;
-}
-
 static void normalize_subject(const char *str)
 {
 	str += 8; /* skip subject: */
@@ -276,11 +233,8 @@ static void normalize_subject(const char *str)
 void filter(void)
 {
 	const struct entry *e;
-	char *from = NULL;
 
 	while (fetchline(buff, sizeof(buff))) {
-//		if (*buff == '\n')
-//			break; /* end of header */
 		if (strncasecmp(buff, "To:", 3) == 0 ||
 				 strncasecmp(buff, "Cc:", 3) == 0 ||
 				 strncasecmp(buff, "Bcc:", 4) == 0) {
@@ -293,7 +247,6 @@ void filter(void)
 		} else if (strncasecmp(buff, "From:", 5) == 0) {
 			flags |= SAW_FROM;
 			filter_from(buff);
-			from = strdup(buff);
 			if ((e = list_filter(buff, folderlist)))
 				folder_match = e->folder;
 		} else if (strncasecmp(buff, "Subject:", 8) == 0) {
@@ -331,13 +284,6 @@ void filter(void)
 		(flags & SAW_FROM) == 0 || (flags & SAW_DATE) == 0 ||
 		/* Rule 7 */
 		(run_drop && (flags & IS_ME) == 0)) {
-		action = 'S';
-		spam();
-		return;
-	}
-
-	/* SAM HACK */
-	if (check_one_name_from(subject, from)) {
 		action = 'S';
 		spam();
 		return;

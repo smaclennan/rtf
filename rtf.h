@@ -39,6 +39,7 @@
 
 #define REGEXP_FLAGS (REG_EXTENDED | REG_ICASE | REG_NEWLINE)
 
+#ifdef IMAP
 /* imap-rtf only */
 
 // config.c
@@ -85,6 +86,6 @@ int connect_to_server(const char *server, int port,
 int process_list(void);
 char *fetchline(char *buf, int len);
 int imap_move(const char *to);
-
+#endif
 
 #endif
