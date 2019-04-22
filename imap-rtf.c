@@ -186,15 +186,9 @@ static const struct entry *list_filter(const char *line, struct entry * const he
 {
 	struct entry *e;
 
-	for (e = head; e; e = e->next) {
-		if (e->reg) {
-			regmatch_t match[1];
-
-			if (regexec(e->reg, line, 1, match, 0) == 0)
-				return e;
-		} else if (strcasestr(line, e->str))
+	for (e = head; e; e = e->next)
+		if (strcasestr(line, e->str))
 			return e;
-	}
 
 	return NULL;
 }

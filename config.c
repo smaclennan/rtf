@@ -111,25 +111,6 @@ static int add_entry(struct entry **head, char *str)
 	if (head == &folderlist)
 		return add_folder(new, str);
 
-	if (*str == '+') {
-		new->reg = malloc(sizeof(regex_t));
-		if (!new->reg) goto oom;
-
-		int rc = regcomp(new->reg, str + 1, REGEXP_FLAGS);
-		if (rc) {
-			char err[80];
-
-			regerror(rc, new->reg, err, sizeof(err));
-			if (just_checking)
-				printf("%s: %s\n", str, err);
-			else
-				syslog(LOG_WARNING, "Bad regexp '%s': %s", str, err);
-			free(new->reg);
-			free(new);
-			return 1;
-		}
-	}
-
 	if (!(new->str = strdup(str)))
 		goto oom;
 
