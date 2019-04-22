@@ -253,20 +253,31 @@ again:
 	return n_uids;
 }
 
+static int did_delete;
+
 // Needed for logging
 unsigned cur_uid;
 
 int imap_move(const char *to)
 {
+	if (*to == '+') {
+		++to;
+
+		if (send_recv("UID STORE %u +FLAGS.SILENT (\\Seen)", cur_uid))
+			return -1;
+	}
+
 	if (send_recv("UID COPY %u %s", cur_uid, to))
 		return -1;
 
+	did_delete = 1;
 	return send_recv("UID STORE %u +FLAGS.SILENT (\\Deleted \\Seen)", cur_uid);
 }
 
 int process_list(void)
 {
 	int did_something = 0;
+	did_delete = 0;
 
 	do {
 		if (build_list() < 0)
@@ -295,6 +306,9 @@ int process_list(void)
 
 	if (did_something)
 		write_last_seen();
+
+	if (did_delete)
+		send_recv("EXPUNGE"); // mmmm... sponge...
 
 	return 0;
 }

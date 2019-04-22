@@ -170,11 +170,17 @@ static void safe_rename(const char *path)
 	imap_move(path);
 }
 
-static inline void ham(void) { /* nop */ }
+static void ham(void)
+{
+	if (folder_match) {
+		action = 'f';
+		safe_rename(folder_match);
+	}
+}
 
 static inline void spam(void) { safe_rename("Spam"); }
 
-static inline void ignore(void) { safe_rename("INBOX/Ignore"); }
+static inline void ignore(void) { safe_rename("INBOX.Ignore"); }
 
 static const struct entry *list_filter(const char *line, struct entry * const head)
 {
@@ -233,6 +239,8 @@ static void normalize_subject(const char *str)
 void filter(void)
 {
 	const struct entry *e;
+
+	folder_match = NULL;
 
 	while (fetchline(buff, sizeof(buff))) {
 		if (strncasecmp(buff, "To:", 3) == 0 ||

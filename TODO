@@ -1,5 +1,5 @@
 * reread config
 
-* folders - read flag
-
 * -C should check folders for validity
+
+* vet allocs... we used to not care
