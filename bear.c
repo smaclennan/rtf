@@ -1,5 +1,6 @@
 #include <unistd.h>
 #include <errno.h>
+#include <sys/poll.h>
 #include "bearssl.h"
 
 
@@ -124,6 +125,25 @@ int ssl_open(int sock, const char *host)
 int ssl_read(char *buffer, int len)
 {
 	return br_sslio_read(&ioc, buffer, len);
+}
+
+int ssl_timed_read(char *buffer, int len, int timeout)
+{
+	struct pollfd ufd = { .fd = sock_fd, .events = POLLIN };
+
+	while (1) {
+		int rc = poll(&ufd, 1, timeout);
+		if (rc == 1) {
+			int n = br_sslio_read(&ioc, buffer, len - 1);
+			if (n < 0)
+				return -1;
+			buffer[n] = 0;
+			return 1;
+		}
+		if (rc == 0)
+			return 0; // timeout
+		puts("Hmmmm... poll returned -1"); // SAM DBG
+	}
 }
 
 int ssl_write(const char *buffer, int len)

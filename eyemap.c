@@ -75,7 +75,10 @@ static int send_recv(const char *fmt, ...)
 		if (n <= 0)
 			return -1;
 
-		sprintf(match, "a%03d OK", cmdno);
+		if (strcmp(fmt, "IDLE") == 0)
+			strcpy(match, "+ idling");
+		else
+			sprintf(match, "a%03d OK", cmdno);
 	} else
 		strcpy(match, "* OK IMAP");
 
@@ -110,8 +113,6 @@ static int fetch(int uid)
 		return -1;
 	buf[n] = 0;
 
-	printf("read %d\n", n); // SAM DBG
-
 	// SAM re?
 	char *p = strchr(buf, '{');
 	if (!p)
@@ -119,12 +120,10 @@ static int fetch(int uid)
 	int len = strtol(p + 1, &p, 10);
 	if (*p != '}')
 		return -1;
-	printf("len %d\n", len); // SAM DBG
 	p = strchr(buf, '\n');
 	if (!p)
 		return -1;
 	len -= n - (p - buf - 1);
-	printf("First line overhead %ld\n", p - buf + 1); // SAM DBBG
 
 	if (len > sizeof(buf) - 40) {
 		printf("HEADER TOO LARGE\n");
@@ -134,7 +133,6 @@ static int fetch(int uid)
 	while (len > 0) {
 		int got = ssl_read(buf + n, len);
 		if (got > 0) {
-			// SAM FIXME - check for buffer overflow
 			n += got;
 			buf[n] = 0;
 			// printf("read %d\n%s\n", n, buf); // SAM DBG
@@ -148,7 +146,6 @@ static int fetch(int uid)
 		}
 
 		len -= got;
-		printf("read %d len now %d\n", got, len); // SAM DBG
 	}
 
 	char final[128];
@@ -157,7 +154,6 @@ static int fetch(int uid)
 		return -1;
 
 	final[n] = 0;
-	printf("final %d\n", n); // SAM DBG
 
 	p = final;
 	if (strncmp(p, "\r\n", 2) == 0)
@@ -166,10 +162,10 @@ static int fetch(int uid)
 		p += 3;
 
 	sprintf(match, "a%03d OK", cmdno);
-	printf("<%s>", p); // SAM DBG
 	if (strncmp(p, match, strlen(match))) {
-		printf("FAILED\n");
-		return -1;
+		printf("FAILED\n"); // SAM DBG
+		puts(final); // SAM DBG
+		return 1; // keep going... assume it was dealt with
 	}
 
 	return 0;
@@ -194,16 +190,31 @@ static int n_uids;
 
 static int build_list(void)
 {
+again:
 	n_uids = 0;
 
-	/* We cannot wildcard the end because 1995:* will match 1994 */
-	if (send_recv("UID SEARCH UID %u:%u", last_seen, last_seen + MAX_UIDS)) {
+	if (send_recv("UID SEARCH UID %u:*", last_seen)) {
 		printf("Search failed\n"); // SAM DBG
 		return -1;
 	}
 
-	for (char *p = buf; (p = strstr(p, "* SEARCH")); )
-		uidlist[n_uids++] = strtol(p + 8, &p, 10);
+	/* For some reason if we get "* 1 RECENT" we don't get the
+	 * UIDs. Search again and we do.
+	 */
+	if (strstr(buf, "RECENT"))
+		goto again;
+
+	char *p = strstr(buf, "* SEARCH ");
+	if (p) {
+		p += 9;
+		while ((uidlist[n_uids] = strtol(p, &p, 10)) > 0)
+			// SAM what if we wrap?
+			if (uidlist[n_uids] >= last_seen) {
+				++n_uids;
+				if (n_uids >= MAX_UIDS)
+					break;
+			}
+	}
 
 	return n_uids;
 }
@@ -231,12 +242,17 @@ int process_list(void)
 			cur_uid = uidlist[i];
 			printf("Fetch %u\n", cur_uid);
 
-			if (fetch(cur_uid)) {
-				puts("FAILED"); // SAM DBG
+			switch (fetch(cur_uid)) {
+			case 0:
+				filter();
+				logit();
+				break;
+			case 1:
+				break;
+			default:
+				puts("FAILED 2"); // SAM DBG
 				return -1;
 			}
-
-			filter();
 
 			last_seen = cur_uid + 1;
 			++did_something;
@@ -248,6 +264,64 @@ int process_list(void)
 
 	return 0;
 }
+
+#ifdef POLLING
+void run(void)
+{
+	while (1) {
+		if (process_list())
+			return;
+		sleep(60);
+	}
+}
+#else
+/* Not sure if this is worth it. Seems to take just as long to get the
+ * messages and we do risk missing one.
+ */
+static char *nowtime(void)
+{
+	static char nowstr[16];
+	const time_t now = time(NULL);
+	struct tm *tm = localtime(&now);
+	sprintf(nowstr, "%02d:%02d:%02d",
+			tm->tm_hour, tm->tm_min, tm->tm_sec);
+	return nowstr;
+}
+
+void run(void)
+{
+	int n;
+
+	// run it once to catch up
+	process_list();
+
+	while (1) {
+		if (send_recv("IDLE"))
+			return;
+		printf(">>> %s IDLING\n", nowtime()); // SAM DBG
+
+		while (1) {
+			n = ssl_timed_read(buf, sizeof(buf), 150); // 2.5 minutes
+			if (n < 0)
+				return;
+			if (n == 0) {
+				puts("TIMEOUT"); // SAM DBG
+				break; // timeout
+			}
+			printf(">>> %s %s", nowtime(), buf); // SAM DBG
+
+			if (strstr(buf, "RECENT") && !strstr(buf, "* 0 RECENT"))
+				break;
+		}
+
+		if (send_recv("DONE"))
+			return;
+
+		if (process_list())
+			return;
+	}
+}
+#endif
 
 int connect_to_server(const char *server, int port,
 					  const char *user, const char *passwd)

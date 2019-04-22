@@ -95,13 +95,7 @@ static int add_blacklist;
 
 static char buff[8096];
 
-/* /home/<user 32>/Maildir/tmp/<time 10>.<pid 5>.<hostname 64>
- * /home/<user 32>/Maildir/.Spam/cur/<time 10>.<pid 5>.<hostname 64>:2,S
- */
-#define PATH_SIZE 144
-
-/* Called at exit() */
-static void logit(void)
+void logit(void)
 {
 	if (!logfile)
 		return;
@@ -171,7 +165,7 @@ static void safe_rename(const char *path)
 {
 	if (dry_run) {
 		printf("Action %c\n", action);
-		exit(0);
+		return;
 	}
 	imap_move(path);
 }
@@ -180,7 +174,7 @@ static inline void ham(void) { /* nop */ }
 
 static inline void spam(void) { safe_rename("Spam"); }
 
-static inline void ignore(void) { safe_rename("Ignore"); }
+static inline void ignore(void) { safe_rename("INBOX/Ignore"); }
 
 static const struct entry *list_filter(const char *line, struct entry * const head)
 {
@@ -235,14 +229,14 @@ static int isok(char c)
 }
 
 /* Check for a one name from */
-static void check_one_name_from(char *subject, char *from)
+static int check_one_name_from(char *subject, char *from)
 {
 	from += 5; /* skip From: */
 	while (isspace(*from)) ++from;
 	while (isok(*from)) ++from;
 	while (isspace(*from)) ++from;
 	if (*from && *from != '<')
-		return;
+		return 0;
 
 	/* We have a "one name" from */
 
@@ -255,8 +249,7 @@ static void check_one_name_from(char *subject, char *from)
 		}
 	}
 
-	action = 'S';
-	spam();
+	return 1;
 }
 
 static void normalize_subject(const char *str)
@@ -324,11 +317,13 @@ void filter(void)
 	if (flags & IS_IGNORED) {
 		action = 'I';
 		ignore();
+		return;
 	}
 	/* Rule 2 */
 	if (flags & IS_HAM) {
 		action = 'H';
 		ham();
+		return;
 	}
 	/* Rule 3, 4, 6 */
 	if ((flags & (IS_SPAM | BOGO_SPAM | FROM_ME)) ||
@@ -338,31 +333,27 @@ void filter(void)
 		(run_drop && (flags & IS_ME) == 0)) {
 		action = 'S';
 		spam();
+		return;
 	}
 
 	/* SAM HACK */
-	check_one_name_from(subject, from);
+	if (check_one_name_from(subject, from)) {
+		action = 'S';
+		spam();
+		return;
+	}
 
 	action = 'h';
 	ham();
 }
 
-static void run(void)
-{
-	while (1) {
-		if (process_list())
-			return;
-		sleep(60);
-	}
-}
-
 static void usage(void)
 {
-	puts("usage:\trtf [-cdnC] [-l logfile] [-F file]\n"
+	puts("usage:\trtf [-cdnC] [-l logfile]\n"
 		 "where:\t-c   add blacklist counts to logfile\n"
 		 "\t-d   mark emails not 'from me' as spam\n"
 		 "\t-h   this help\n"
-		 "\t-n   dry run (mainly used with -F)\n"
+		 "\t-n   dry run\n"
 		 "\t-C   just check the config file\n"
 		 "\t     validates any regular expressions\n"
 		);
@@ -391,10 +382,6 @@ int main(int argc, char *argv[])
 	rc = read_config();
 	if (just_checking)
 		return rc;
-
-	// SAM FIXME
-	if (logfile)
-		atexit(logit);
 
 	while (1) {
 		int sock = connect_to_server(get_global("server"),
