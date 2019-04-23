@@ -2,4 +2,8 @@
 
 * -C should check folders for validity
 
-* vet allocs... we used to not care
+* time based folder deletion
+
+* should a search failed reconnect?
+
+* dump state?

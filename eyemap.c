@@ -356,7 +356,7 @@ void run(void)
 		printf(">>> %s IDLING\n", nowtime()); // SAM DBG
 
 		while (1) {
-			n = ssl_timed_read(buf, sizeof(buf), 150); // 2.5 minutes
+			n = ssl_timed_read(buf, sizeof(buf), 150000); // 2.5 minutes
 			if (n < 0)
 				return;
 			if (n == 0) {
@@ -378,10 +378,19 @@ void run(void)
 }
 #endif
 
+#define HANDLE_RC(msg) do {							\
+		if (rc) {									\
+			logmsg(msg);							\
+			if ((rc) < 0)							\
+				goto failed2;						\
+			exit(2);								\
+		}											\
+	} while (0)
+
 int connect_to_server(const char *server, int port,
 					  const char *user, const char *passwd)
 {
-	int sock;
+	int sock, rc;
 
 	struct hostent *host = gethostbyname(server);
 	if (!host) {
@@ -415,20 +424,14 @@ again:
 		goto failed;
 	}
 
-	if (send_recv(NULL)) {
-		printf("Did not get server OK\n");
-		goto failed2;
-	}
+	rc = send_recv(NULL);
+	HANDLE_RC("Did not get server OK");
 
-	if (send_recv("LOGIN %s %s", user, passwd)) {
-		printf("Login failed\n");
-		goto failed2;
-	}
+	rc = send_recv("LOGIN %s %s", user, passwd);
+	HANDLE_RC("Login failed");
 
-	if (send_recv("SELECT INBOX")) {
-		printf("Select failed\n");
-		goto failed2;
-	}
+	rc = send_recv("SELECT INBOX");
+	HANDLE_RC("Select failed");
 
 	if (last_seen == 1)
 		read_last_seen();

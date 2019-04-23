@@ -46,5 +46,4 @@ install-strip: install
 	strip $(DESTDIR)/usr/bin/*
 
 clean:
-	rm -f rtf learnem rtfsort regex-check TAGS rtf-*.tar.gz
-
+	rm -f rtf imap-rtf learnem rtfsort regex-check TAGS rtf-*.tar.gz
