@@ -9,48 +9,7 @@ struct entry *blacklist;
 struct entry *ignorelist;
 struct entry *folderlist;
 
-static int globals;
-
-static int add_global(struct entry *new, char *str)
-{
-	char *p = strchr(str, '=');
-
-	if (!p) {
-		if (just_checking)
-			printf("Bad global line '%s'\n", str);
-		else
-			syslog(LOG_WARNING, "Bad global line '%s'", str);
-		return 1;
-	}
-
-	*p++ = 0;
-	if (strcmp(str, "server") == 0)
-		globals |= 1;
-	else if (strcmp(str, "user") == 0)
-		globals |= 2;
-	else if (strcmp(str, "passwd") == 0)
-		globals |= 4;
-	else if (strcmp(str, "port") == 0)
-		globals |= 8;
-	else {
-		if (just_checking)
-			printf("Unknown global '%s'\n", str);
-		else
-			syslog(LOG_WARNING, "Unknown global '%s'", str);
-		return 1;
-	}
-
-	new->str = strdup(str);
-	new->folder = strdup(p);
-	if (!new->str || !new->folder) {
-		syslog(LOG_ERR, "Out of memory.");
-		return 1; /* not fatal */
-	}
-
-	new->next = global;
-	global = new;
-	return 0;
-}
+static int generation;
 
 const char *get_global(const char *glob)
 {
@@ -65,62 +24,85 @@ int get_global_num(const char *glob)
 	return strtoul(get_global(glob), NULL, 10);
 }
 
-static int add_folder(struct entry *new, char *str)
-{
-	char *p = strchr(str, ',');
-
-	if (just_checking) {
-		if (!p)
-			printf("Bad folder line '%s'\n", str);
-#if IMAP_CHANGE
-		else {
-			char path[PATH_SIZE];
-			snprintf(path, sizeof(path) - strlen(tmp_file), "%s/Maildir/%s/new", home, p + 1);
-			if (access(path, F_OK))
-				printf("Bad folder %s\n", path);
-			return 0;
-		}
-#endif
-	}
-
-	if (!p) {
-		syslog(LOG_WARNING, "folder line missing , '%s'", str);
-		return 1;
-	}
-
-	*p++ = 0;
-	new->str = strdup(str);
-	new->folder = strdup(p);
-	if (!new->str || !new->folder) {
-		syslog(LOG_ERR, "Out of memory.");
-		return 1; /* not fatal */
-	}
-
-	new->next = folderlist;
-	folderlist = new;
-	return 0;
-}
-
 static int add_entry(struct entry **head, char *str)
 {
-	struct entry *new = calloc(1, sizeof(struct entry));
-	if (!new) goto oom;
+	char *p = NULL;
+	int need_p = 0;
 
-	if (head == &global)
-		return add_global(new, str);
-	if (head == &folderlist)
-		return add_folder(new, str);
+	if (head == &global) {
+		p = strchr(str, '=');
+		need_p = 1;
+	}
+	if (head == &folderlist) {
+		p = strchr(str, '=');
+		need_p = 1;
+	}
+
+	if (need_p) {
+		if (p)
+			*p++ = 0;
+		else {
+			if (just_checking)
+				printf("Bad line '%s'\n", str);
+			else
+				syslog(LOG_WARNING, "Bad line '%s'", str);
+			return 1;
+		}
+	}
+
+	for (struct entry *e = *head; e; e = e->next)
+		if (strcmp(e->str, str) == 0) {
+			if (p && strcmp(e->folder, p)) {
+				free((char *)e->folder);
+				if (!(e->folder = strdup(p)))
+					goto oom;
+			}
+			e->generation = generation;
+			return 0;
+		}
+
+	struct entry *new = calloc(1, sizeof(struct entry));
+	if (!new)
+		goto oom;
 
 	if (!(new->str = strdup(str)))
 		goto oom;
+	if (p)
+		if (!(new->folder = strdup(p)))
+			goto oom;
 
+	new->generation = generation;
 	new->next = *head;
 	*head = new;
 	return 0;
 
 oom:
 	syslog(LOG_ERR, "Out of memory.");
-	exit(0);
+	exit(1);
+}
+
+static void check_list(struct entry **head)
+{
+	struct entry *prev = NULL;
+	struct entry *e = *head;
+
+	while (e) {
+		struct entry *next = e->next;
+
+		if (e->generation != generation) {
+			if (prev)
+				prev->next = next;
+			else
+				*head = next;
+			printf("FREE %s\n", e->str); // SAM DBG
+			free((char *)e->str);
+			free((char *)e->folder);
+			free(e);
+		} else
+			prev = e;
+
+		e = next;
+	}
 }
 
 int read_config(void)
@@ -170,15 +152,15 @@ int read_config(void)
 
 	fclose(fp);
 
-	if ((globals & 15) != 15) {
-		if (just_checking) {
-			printf("Missing required globals\n");
-			rc = 1;
-		} else {
-			syslog(LOG_ERR, "Missing required globals\n");
-			exit(1);
-		}
-	}
+	check_list(&global);
+	check_list(&melist);
+	check_list(&fromlist);
+	check_list(&whitelist);
+	check_list(&blacklist);
+	check_list(&ignorelist);
+	check_list(&folderlist);
+
+	++generation;
 
 	return rc;
 }

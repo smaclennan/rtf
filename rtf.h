@@ -46,7 +46,9 @@
 struct entry {
 	const char *str;
 	const char *folder;
-#ifndef IMAP
+#ifdef IMAP
+	int generation;
+#else
 	regex_t *reg;
 #endif
 	struct entry *next;
