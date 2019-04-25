@@ -3,11 +3,9 @@
 #include <dirent.h>
 
 struct entry *global;
-struct entry *melist;
-struct entry *fromlist;
 struct entry *whitelist;
+struct entry *graylist;
 struct entry *blacklist;
-struct entry *ignorelist;
 struct entry *folderlist;
 
 static int generation;
@@ -17,18 +15,22 @@ const char *get_global(const char *glob)
 	for (struct entry *e = global; e; e = e->next)
 		if (strcmp(e->str, glob) == 0)
 			return e->folder;
-	return "bogus";
+	return NULL;
 }
 
 int get_global_num(const char *glob)
 {
-	return strtoul(get_global(glob), NULL, 10);
+	const char *str = get_global(glob);
+	if (str)
+		return strtoul(get_global(glob), NULL, 10);
+	return 0;
 }
 
 static int add_entry(struct entry **head, char *str)
 {
 	char *p = NULL;
 	int need_p = 0;
+	struct entry *tail = NULL;
 
 	if (*str == '\\') ++str;
 
@@ -45,15 +47,12 @@ static int add_entry(struct entry **head, char *str)
 		if (p)
 			*p++ = 0;
 		else {
-			if (just_checking)
-				printf("Bad line '%s'\n", str);
-			else
-				syslog(LOG_WARNING, "Bad line '%s'", str);
+			logmsg("Bad line '%s'", str);
 			return 1;
 		}
 	}
 
-	for (struct entry *e = *head; e; e = e->next)
+	for (struct entry *e = *head; e; e = e->next) {
 		if (strcmp(e->str, str) == 0) {
 			if (p && strcmp(e->folder, p)) {
 				free((char *)e->folder);
@@ -63,6 +62,8 @@ static int add_entry(struct entry **head, char *str)
 			e->generation = generation;
 			return 0;
 		}
+		tail = e;
+	}
 
 	struct entry *new = calloc(1, sizeof(struct entry));
 	if (!new)
@@ -75,8 +76,11 @@ static int add_entry(struct entry **head, char *str)
 			goto oom;
 
 	new->generation = generation;
-	new->next = *head;
-	*head = new;
+	if (tail) {
+		tail->next = new;
+		tail = new;
+	} else
+		*head = new;
 	return 0;
 
 oom:
@@ -135,14 +139,10 @@ static int read_config_file(const char *fname)
 				head = &global;
 			else if (strcmp(line, "[whitelist]") == 0)
 				head = &whitelist;
+			else if (strcmp(line, "[graylist]") == 0)
+				head = &graylist;
 			else if (strcmp(line, "[blacklist]") == 0)
 				head = &blacklist;
-			else if (strcmp(line, "[ignore]") == 0)
-				head = &ignorelist;
-			else if (strcmp(line, "[me]") == 0)
-				head = &melist;
-			else if (strcmp(line, "[fromlist]") == 0)
-				head = &fromlist;
 			else if (strcmp(line, "[folders]") == 0)
 				head = &folderlist;
 			else {
@@ -179,13 +179,29 @@ int read_config(void)
 		closedir(dir);
 	}
 
-	// check_list(&global);
-	check_list(&melist);
-	check_list(&fromlist);
+	// Do not delete working globals
 	check_list(&whitelist);
+	check_list(&graylist);
 	check_list(&blacklist);
-	check_list(&ignorelist);
 	check_list(&folderlist);
+
+	if (generation == 0)
+		if (!get_global("server") ||
+			get_global_num("port") == 0 ||
+			!get_global("user") ||
+			!get_global("passwd")) {
+			logmsg("Missing required global(s)");
+			rc = 1;
+		}
+
+	if (graylist && !get_global("graylist")) {
+		logmsg("graylist global missing");
+		rc = 1;
+	}
+	if (blacklist && !get_global("blacklist")) {
+		logmsg("blacklist global missing");
+		rc = 1;
+	}
 
 	++generation;
 

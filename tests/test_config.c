@@ -10,6 +10,7 @@
 
 const char *home = "/home/test";
 int just_checking;
+int verbose;
 
 #define MAX_LINES 10
 static char *lines[MAX_LINES];
@@ -33,6 +34,25 @@ static int my_fclose(FILE *fp) { return 0; }
 #undef fopen
 #undef fgets
 #undef fclose
+
+static void verify_list(struct entry *head, int start)
+{
+	struct entry *e = head;
+	for (int i = start; lines[i]; ++i) {
+		assert(e);
+		char *p = strchr(lines[i], '=');
+		if (p) {
+			int len = p - lines[i];
+			assert(strncmp(e->str, lines[i], len) == 0);
+			assert(strcmp(e->folder, p + 1) == 0);
+		} else {
+			assert(strcmp(e->str, lines[i]) == 0);
+			assert(e->folder == NULL);
+		}
+		e = e->next;
+	}
+	assert(e == NULL);
+}
 
 /* Run with valgrind to make sure no memory leaked */
 int main(int argc, char *argv[])
@@ -58,10 +78,7 @@ int main(int argc, char *argv[])
 	assert(strcmp(folderlist->folder, "father") == 0);
 	assert(folderlist->next == NULL);
 
-	assert(ignorelist != NULL);
-	assert(strcmp(ignorelist->str, "everything") == 0);
-	assert(ignorelist->folder == NULL);
-	assert(ignorelist->next == NULL);
+	verify_list(ignorelist, 5);
 
 	/* change the global and add some entries */
 	lines[1] = "server=good";
@@ -82,73 +99,41 @@ int main(int argc, char *argv[])
 	assert(strcmp(folderlist->folder, "father") == 0);
 	assert(folderlist->next == NULL);
 
-	struct entry *e = ignorelist;
-	assert(e != NULL);
-	assert(strcmp(e->str, "fred") == 0);
-	assert(e->folder == NULL);
-	e = e->next;
-	assert(e != NULL);
-	assert(strcmp(e->str, "meh") == 0);
-	assert(e->folder == NULL);
-	e = e->next;
-	assert(e != NULL);
-	assert(strcmp(e->str, "nothing") == 0);
-	assert(e->folder == NULL);
-	e = e->next;
-	assert(e != NULL);
-	assert(strcmp(e->str, "everything") == 0);
-	assert(e->folder == NULL);
-	assert(e->next == NULL);
+	verify_list(ignorelist, 5);
 
 	/* delete a first entry */
-	lines[8] = NULL;
+	for (int i = 5; i <= 8; ++i)
+		lines[i] = lines[i + 1];
 
 	curline = 0;
 	assert(read_config() == 0);
 
-	e = ignorelist;
-	assert(e != NULL);
-	assert(strcmp(e->str, "meh") == 0);
-	assert(e->folder == NULL);
-	e = e->next;
-	assert(e != NULL);
-	assert(strcmp(e->str, "nothing") == 0);
-	assert(e->folder == NULL);
-	e = e->next;
-	assert(e != NULL);
-	assert(strcmp(e->str, "everything") == 0);
-	assert(e->folder == NULL);
-	assert(e->next == NULL);
+	verify_list(ignorelist, 5);
 
 	/* delete a middle entry */
-	lines[6] = "meh";
-	lines[7] = NULL;
+	for (int i = 6; i <= 7; ++i)
+		lines[i] = lines[i + 1];
 
 	curline = 0;
 	assert(read_config() == 0);
 
-	e = ignorelist;
-	assert(e != NULL);
-	assert(strcmp(e->str, "meh") == 0);
-	assert(e->folder == NULL);
-	e = e->next;
-	assert(e != NULL);
-	assert(strcmp(e->str, "everything") == 0);
-	assert(e->folder == NULL);
-	assert(e->next == NULL);
+	verify_list(ignorelist, 5);
 
 	/* delete a last entry */
-	lines[5] = "meh";
 	lines[6] = NULL;
 
 	curline = 0;
 	assert(read_config() == 0);
 
-	e = ignorelist;
-	assert(e != NULL);
-	assert(strcmp(e->str, "meh") == 0);
-	assert(e->folder == NULL);
-	assert(e->next == NULL);
+	verify_list(ignorelist, 5);
+
+	/* delete the last entry */
+	lines[5] = NULL;
+
+	curline = 0;
+	assert(read_config() == 0);
+
+	verify_list(ignorelist, 5);
 
 	/* delete all the rest */
 	lines[1] = NULL;
@@ -163,33 +148,23 @@ int main(int argc, char *argv[])
 	/* test folderlist */
 	lines[0] = "[folders]";
 	lines[1] = "Review Request=+Reviews";
-	lines[2] = "\\[Confluence]=+Confluence";
-	lines[3] = "<jirabbqnx@blackberry.com>=Bugs";
-	lines[4] = NULL;
+	lines[2] = "Confluence] BTS=inbox";
+	lines[3] = "Confluence]=+Confluence";
+	lines[4] = "<jirabbqnx@blackberry.com>=Bugs";
+	lines[5] = NULL;
 
 	curline = 0;
 	assert(read_config() == 0);
 
-	e = folderlist;
-	assert(e != NULL);
-	assert(strcmp(e->str, "<jirabbqnx@blackberry.com>") == 0);
-	assert(strcmp(e->folder, "Bugs") == 0);
-	e = e->next;
-	assert(e != NULL);
-	assert(strcmp(e->str, "[Confluence]") == 0);
-	assert(strcmp(e->folder, "+Confluence") == 0);
-	e = e->next;
-	assert(e != NULL);
-	assert(strcmp(e->str, "Review Request") == 0);
-	assert(strcmp(e->folder, "+Reviews") == 0);
-	assert(e->next == NULL);
+	verify_list(folderlist, 1);
 
 	/* delete everything again */
 	lines[1] = NULL;
 
 	curline = 0;
 	assert(read_config() == 0);
-	assert(folderlist == NULL);
+
+	verify_list(folderlist, 1);
 
 	puts("Success!");
 	return 0;

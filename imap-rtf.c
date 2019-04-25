@@ -19,72 +19,39 @@
  *
  * The filter lists:
  *
+ * global - Global settings such as server and user
  * whitelist - To or From that should be marked ham
+ * graylist - From that should be ignored
  * blacklist - From or Subject that should be marked spam
- * ignore - From that should be ignored
- * me - list of my emails (see below)
+ * folders - Email filtering
  *
  * Note: To includes To, Cc, and Bcc.
  *
- * Descisions:
+ * Folder rules: <match>=+?<folder>
  *
- * 1) The ignore list (ignore)
- * 2) Whitelist (ham)
- * 3) Blacklist (spam)
- * 4) Check if from me (spam)
- * 5) Check if the from and/or date fields are missing (spam)
- * 6) Optionally check if not on the me list (spam)
+ * If a + is put before the folder, the message is also marked read.
  *
- * Actions:
- *
- * Ham moved to inbox and left as new.
- * Spam moved to spam folder and marked as read.
- * Ignore moved to ignore folder and marked as read.
- * Application attachment moved to drop folder and marked as read.
- *
- * The from me (rule 4) is probably non-intuitive. I have my last name
- * white listed. All emails legitimately from me are of the form
- * <first name> <lastname> <email>. Spams are almost always just
- * <email>. So the whitelist catches the legitimate emails and the
- * "from me" catches the spams. We do get a few false positive hams
- * because of this.
- *
- * Notes:
- *
- * If you enable app checking, we need to read the entire email to
- * check for attachments. Normally, only the header needs to be read.
- *
- * You can put regular expressions in the list match strings. Regular
- * expressions start with a plus sign (+). All other strings are
- * literal and do not go through the regexp parser.
- *
- * Note that you are given the entire header line. This means you can
- * match on the field to differentiate say To: and Cc:.
- *
- * Other features:
- *
- * - folders
- */
-
-/* Ideas that failed:
- *
- * - filter out utf from - too many false positives
+ * If folder is the special folder inbox, then we stop traversing the
+ * folder list and just leave the message in the INBOX.
+ * For example:
+ *     [folders]
+ *     john Smith=inbox
+ *     smith=Smith Folder
+ * This would put all Smith's in the Smith Folder except John Smith.
  */
 
 #include "rtf.h"
 #include <sys/wait.h>
 
 int verbose;
-static int run_drop;
 int just_checking;
 static const char *logfile;
+static int log_verbose;
 const char *home;
 /* We only print the first 42 chars of subject */
 static char subject[48] = { 'N', 'O', 'N', 'E' };
 static char action = '?';
 static int use_stderr;
-
-/* For dry_run you probably want file mode too. */
 static int dry_run;
 
 static unsigned flags;
@@ -97,7 +64,7 @@ static char buff[8096];
 
 void logit(void)
 {
-	if (!logfile)
+	if (!logfile || (action == 'h' && !log_verbose))
 		return;
 
 	FILE *fp = fopen(logfile, "a");
@@ -114,10 +81,9 @@ void logit(void)
 #define OUT(a, c) ((flags & (a)) ? (c) : '-')
 	/* Last two flags are for learnem */
 	fprintf(fp, "%10u %c%c%c%c%c%c%c%c--%c %c %.42s\n", cur_uid,
-			OUT(IS_ME, 'M'), OUT(SAW_FROM, 'F'), OUT(SAW_DATE, 'D'),
+			'-', OUT(SAW_FROM, 'F'), OUT(SAW_DATE, 'D'),
 			OUT(IS_HAM, 'H'), OUT(IS_IGNORED, 'I'), OUT(IS_SPAM, 'S'),
-			OUT(FROM_ME, 'f'), OUT(BOGO_SPAM, 'B'),
-			OUT(FORWARD, 'F'), action, subject);
+			'-', '-', '-', action, subject);
 
 	if (add_blacklist) {
 		int i;
@@ -125,8 +91,7 @@ void logit(void)
 		for (i = 0; i < 2; ++i)
 			if (saw_bl[i])
 				fprintf(fp, "%10u B%c-----%c--- %c %.42s\n", cur_uid,
-						i ? 'S' : 'F', OUT(BOGO_SPAM, 'B'),
-						action, saw_bl[i]->str);
+						i ? 'S' : 'F', '-', action, saw_bl[i]->str);
 	}
 
 	if (ferror(fp))
@@ -178,9 +143,9 @@ static void ham(void)
 	}
 }
 
-static inline void spam(void) { safe_rename("Spam"); }
+static inline void spam(void) { safe_rename(get_global("blacklist")); }
 
-static inline void ignore(void) { safe_rename("INBOX.Ignore"); }
+static inline void ignore(void) { safe_rename(get_global("graylist")); }
 
 static const struct entry *list_filter(const char *line, struct entry * const head)
 {
@@ -199,14 +164,12 @@ static inline void filter_from(const char *from)
 
 	if (list_filter(from, whitelist))
 		flags |= IS_HAM;
-	if (list_filter(from, ignorelist))
+	if (list_filter(from, graylist))
 		flags |= IS_IGNORED;
 	if ((e = list_filter(from, blacklist))) {
 		flags |= IS_SPAM;
 		blacklist_count(e, 0);
 	}
-	if (list_filter(from, fromlist))
-		flags |= FROM_ME;
 }
 
 static void normalize_subject(const char *str)
@@ -242,8 +205,6 @@ void filter(void)
 				 strncasecmp(buff, "Bcc:", 4) == 0) {
 			if (list_filter(buff, whitelist))
 				flags |= IS_HAM;
-			if (list_filter(buff, melist))
-				flags |= IS_ME;
 			if ((e = list_filter(buff, folderlist)))
 				folder_match = e->folder;
 		} else if (strncasecmp(buff, "From:", 5) == 0) {
@@ -268,57 +229,47 @@ void filter(void)
 		}
 	}
 
-	/* Rule 1 */
 	if (flags & IS_IGNORED) {
 		action = 'I';
 		ignore();
-		return;
-	}
-	/* Rule 2 */
-	if (flags & IS_HAM) {
+	} else if (flags & IS_HAM) {
 		action = 'H';
 		ham();
-		return;
-	}
-	/* Rule 3, 4, 6 */
-	if ((flags & (IS_SPAM | BOGO_SPAM | FROM_ME)) ||
-		/* Rule 5 */
-		(flags & SAW_FROM) == 0 || (flags & SAW_DATE) == 0 ||
-		/* Rule 7 */
-		(run_drop && (flags & IS_ME) == 0)) {
+	} else if ((flags & IS_SPAM) ||
+			   (flags & SAW_FROM) == 0 || (flags & SAW_DATE) == 0) {
 		action = 'S';
 		spam();
-		return;
+	} else {
+		action = 'h';
+		ham();
 	}
-
-	action = 'h';
-	ham();
 }
 
 static void usage(void)
 {
-	puts("usage:\trtf [-cdnC] [-l logfile]\n"
+	puts("usage:\trtf [-cdnC] [-{lL} logfile]\n"
 		 "where:\t-c   add blacklist counts to logfile\n"
-		 "\t-d   mark emails not 'from me' as spam\n"
+		 "\t-d   daemonize\n"
 		 "\t-h   this help\n"
 		 "\t-n   dry run\n"
 		 "\t-C   just check the config file\n"
-		 "\t     validates any regular expressions\n"
+		 "-l only logs messages that match a rule, -L logs everything."
 		);
 }
 
 int main(int argc, char *argv[])
 {
-	int c, rc;
+	int c, rc, do_daemon = 0;
 	while ((c = getopt(argc, argv, "cdhl:nvC")) != EOF)
 		switch (c) {
 		case 'c': add_blacklist = 1; break;
-		case 'd': run_drop = 1; break;
+		case 'd': do_daemon = 1; break;
 		case 'h': usage(); exit(0);
+		case 'L': log_verbose = 1; // fall thru
 		case 'l': logfile = optarg; break;
 		case 'n': dry_run = 1; break;
 		case 'v': ++verbose; break;
-		case 'C': just_checking = 1; break;
+		case 'C': just_checking = 1; use_stderr = 1; break;
 		}
 
 	home = getenv("HOME");
@@ -328,8 +279,17 @@ int main(int argc, char *argv[])
 	}
 
 	rc = read_config();
-	if (just_checking)
+	if (rc)
 		return rc;
+	if (just_checking)
+		return 0;
+
+	if (do_daemon) {
+		if (daemon(1, 0))
+			logmsg("daemon: %s", strerror(errno));
+	}
+
+	signal(SIGUSR1, need_reread);
 
 	while (1) {
 		int sock = connect_to_server(get_global("server"),

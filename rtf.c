@@ -117,7 +117,7 @@ static struct entry *melist;
 static struct entry *fromlist;
 static struct entry *whitelist;
 static struct entry *blacklist;
-static struct entry *ignorelist;
+static struct entry *graylist;
 static struct entry *forwardlist;
 static struct entry *forwardfilter;
 static struct entry *folderlist;
@@ -527,7 +527,7 @@ static int read_config(void)
 			else if (strcmp(line, "[blacklist]") == 0)
 				head = &blacklist;
 			else if (strcmp(line, "[ignore]") == 0)
-				head = &ignorelist;
+				head = &graylist;
 			else if (strcmp(line, "[me]") == 0)
 				head = &melist;
 			else if (strcmp(line, "[fromlist]") == 0)
@@ -680,7 +680,7 @@ static inline void filter_from(const char *from)
 
 	if (list_filter(from, whitelist))
 		flags |= IS_HAM;
-	if (list_filter(from, ignorelist))
+	if (list_filter(from, graylist))
 		flags |= IS_IGNORED;
 	if ((e = list_filter(from, blacklist))) {
 		flags |= IS_SPAM;

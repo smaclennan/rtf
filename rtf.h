@@ -58,8 +58,8 @@ extern struct entry *global;
 extern struct entry *melist;
 extern struct entry *fromlist;
 extern struct entry *whitelist;
+extern struct entry *graylist;
 extern struct entry *blacklist;
-extern struct entry *ignorelist;
 extern struct entry *folderlist;
 
 const char *get_global(const char *glob);
@@ -90,6 +90,7 @@ int connect_to_server(const char *server, int port,
 int process_list(void);
 char *fetchline(char *buf, int len);
 int imap_move(const char *to);
+void need_reread(int signo);
 #endif
 
 #endif

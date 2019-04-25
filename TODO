@@ -1,6 +1,4 @@
-* reread config
-
-* -C should check folders for validity
+* -C should check folders for validity?
 
 * time based folder deletion
 
@@ -8,8 +6,4 @@
 
 * dump state?
 
-* better buffering
-  * send_recv
-
-* don't save password in plain text
-
+* better buffering in send_recv

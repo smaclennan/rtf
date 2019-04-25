@@ -8,11 +8,10 @@
 
 static unsigned last_seen = 1;
 
-static char buf[8 * 1024];
+/* Largest buffer I have seen is 6,761 */
+static char buf[16 * 1024];
 static char *curline;
 static int cmdno;
-
-static int maxbuf; // SAM DBG
 
 static void write_last_seen(void)
 {
@@ -45,6 +44,8 @@ static int send_recv(const char *fmt, ...)
 {
 	char match[16], *p;
 	int n;
+
+	curline = buf;
 
 	if (fmt) {
 		va_list ap;
@@ -83,10 +84,6 @@ static int send_recv(const char *fmt, ...)
 		if (verbose > 1)
 			printf("S:%d: %s", n, cur);
 		if ((p = strstr(cur, match))) {
-			if (sizeof(buf) - len > maxbuf) {
-				maxbuf = sizeof(buf) - len;
-				printf("Max %d\n", maxbuf);
-			}
 			p += strlen(match);
 			if (strncmp(p, "OK ", 3) == 0)
 				return 0;
@@ -112,7 +109,9 @@ char *fetchline(char *line, int len)
 	char *end = strchr(curline, '\n');
 	if (end)
 		*end++ = 0;
-	snprintf(line, len, "%s", curline); // SAM strlcpy
+	int n = snprintf(line, len, "%s", curline);
+	if (n == len)
+		printf("POSSIBLE TRUNCATION\n"); // SAM DBG
 	curline = end;
 	return line;
 }
@@ -185,18 +184,17 @@ int process_list(void)
 
 		for (int i = 0; i < n_uids; ++i) {
 			cur_uid = uidlist[i];
-			printf("Fetch %u\n", cur_uid);
+			if (verbose)
+				printf("Fetch %u\n", cur_uid);
 
 			switch(send_recv("UID FETCH %d (BODY.PEEK[HEADER])", cur_uid)) {
 			case 0:
-				curline = buf;
 				filter();
 				logit();
 				break;
 			case 1:
 				break;
 			default:
-				puts("FAILED 2"); // SAM DBG
 				return -1;
 			}
 
@@ -214,6 +212,13 @@ int process_list(void)
 	return 0;
 }
 
+static int reread_config;
+
+void need_reread(int signo)
+{
+	reread_config = 1;
+}
+
 // Idling does not work with exchange... just poll
 void run(void)
 {
@@ -221,6 +226,10 @@ void run(void)
 		if (process_list())
 			return;
 		sleep(60);
+		if (reread_config) {
+			reread_config = 0;
+			read_config();
+		}
 	}
 }
 
