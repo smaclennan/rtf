@@ -179,7 +179,7 @@ int read_config(void)
 		closedir(dir);
 	}
 
-	check_list(&global);
+	// check_list(&global);
 	check_list(&melist);
 	check_list(&fromlist);
 	check_list(&whitelist);

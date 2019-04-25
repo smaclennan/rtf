@@ -12,6 +12,8 @@ static char buf[8 * 1024];
 static char *curline;
 static int cmdno;
 
+static int maxbuf; // SAM DBG
+
 static void write_last_seen(void)
 {
 	char path[100];
@@ -69,65 +71,35 @@ static int send_recv(const char *fmt, ...)
 	} else
 		strcpy(match, "* ");
 
+	char *cur = buf;
+	int len = sizeof(buf);
 	while (1) {
-		// SAM buffer up?
 		// SAM timeout? ssl_timed_read did not work
-		n = ssl_read(buf, sizeof(buf) - 1);
-		if (n <= 0)
+		n = ssl_read(cur, len - 1);
+		if (n < 0)
 			return -1;
 
-		buf[n] = 0;
+		cur[n] = 0;
 		if (verbose > 1)
-			printf("S:%d: %s", n, buf);
-		if ((p = strstr(buf, match))) {
+			printf("S:%d: %s", n, cur);
+		if ((p = strstr(cur, match))) {
+			if (sizeof(buf) - len > maxbuf) {
+				maxbuf = sizeof(buf) - len;
+				printf("Max %d\n", maxbuf);
+			}
 			p += strlen(match);
 			if (strncmp(p, "OK ", 3) == 0)
 				return 0;
 			printf("Bad reply: %s\n", buf); // SAM DBG
 			return 1;
 		}
-	}
-}
 
-static int fetch(int uid)
-{
-	char match[16], *p;
-	int n;
+		cur += n;
+		len -= n;
 
-	curline = buf;
-
-	++cmdno;
-	n = sprintf(buf, "a%03d UID FETCH %d (BODY.PEEK[HEADER])\r\n", cmdno, uid);
-
-	n = ssl_write(buf, n);
-	if (n <= 0)
-		return -1;
-
-	// Exchange does not give a size
-	sprintf(match, "\na%03d ", cmdno);
-
-	while (1) {
-		// SAM buffer overflow
-		int got = ssl_read(buf + n, sizeof(buf) - 1 - n);
-		if (got > 0) {
-			n += got;
-			buf[n] = 0;
-			// printf("read %d\n%s\n", n, buf); // SAM DBG
-			// SAM HACK what if returns !OK?
-			if ((p = strstr(buf, match))) {
-				if (strncmp(p + strlen(match), "OK", 2) == 0) {
-					puts("GOOD");
-					return 0;
-				}
-				printf("Bad '%s'", p);
-				return 1; // keep going... assume it was dealt with
-			}
-		} else if(got == 0) {
-			perror("EOF");
-			return -1;
-		} else {
-			perror("read");
-			return -1;
+		if (len < 2) {
+			printf("Buffer overflow!!\n"); // SAM DBG
+			return 0; // SAM try with what we have?
 		}
 	}
 }
@@ -215,8 +187,9 @@ int process_list(void)
 			cur_uid = uidlist[i];
 			printf("Fetch %u\n", cur_uid);
 
-			switch (fetch(cur_uid)) {
+			switch(send_recv("UID FETCH %d (BODY.PEEK[HEADER])", cur_uid)) {
 			case 0:
+				curline = buf;
 				filter();
 				logit();
 				break;

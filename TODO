@@ -10,7 +10,6 @@
 
 * better buffering
   * send_recv
-  * fetch
 
 * don't save password in plain text
 
