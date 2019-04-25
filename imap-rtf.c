@@ -172,7 +172,7 @@ static void safe_rename(const char *path)
 
 static void ham(void)
 {
-	if (folder_match) {
+	if (folder_match && strcmp(folder_match, "inbox")) {
 		action = 'f';
 		safe_rename(folder_match);
 	}

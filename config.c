@@ -1,5 +1,6 @@
 #include "rtf.h"
 #include <limits.h>
+#include <dirent.h>
 
 struct entry *global;
 struct entry *melist;
@@ -28,6 +29,8 @@ static int add_entry(struct entry **head, char *str)
 {
 	char *p = NULL;
 	int need_p = 0;
+
+	if (*str == '\\') ++str;
 
 	if (head == &global) {
 		p = strchr(str, '=');
@@ -94,7 +97,6 @@ static void check_list(struct entry **head)
 				prev->next = next;
 			else
 				*head = next;
-			printf("FREE %s\n", e->str); // SAM DBG
 			free((char *)e->str);
 			free((char *)e->folder);
 			free(e);
@@ -105,22 +107,23 @@ static void check_list(struct entry **head)
 	}
 }
 
-int read_config(void)
+static int read_config_file(const char *fname)
 {
-	char fname[128];
 	struct entry **head = NULL;
 	int rc = 0;
 
-	snprintf(fname, sizeof(fname), "%s/.rtf", home);
-
 	FILE *fp = fopen(fname, "r");
 	if (!fp) {
-		if (errno != ENOENT) {
-			perror(fname);
-			syslog(LOG_WARNING, "%s: %m", fname);
-		}
+		if (errno == ENOENT)
+			return 0;
+
+		perror(fname);
+		syslog(LOG_WARNING, "%s: %m", fname);
 		return 1;
 	}
+
+	if (verbose)
+		printf("Reading %s\n", fname);
 
 	char line[128];
 	while (fgets(line, sizeof(line), fp)) {
@@ -151,6 +154,30 @@ int read_config(void)
 	}
 
 	fclose(fp);
+
+	return rc;
+}
+
+int read_config(void)
+{
+	char fname[128];
+	int rc;
+
+	snprintf(fname, sizeof(fname), "%s/.rtf", home);
+	rc = read_config_file(fname);
+
+	snprintf(fname, sizeof(fname), "%s/.rtf.d", home);
+	DIR *dir = opendir(fname);
+	if (dir) {
+		struct dirent *ent;
+		while ((ent = readdir(dir))) {
+			if (*ent->d_name == '.')
+				continue;
+			snprintf(fname, sizeof(fname), "%s/.rtf.d/%s", home, ent->d_name);
+			rc |= read_config_file(fname);
+		}
+		closedir(dir);
+	}
 
 	check_list(&global);
 	check_list(&melist);

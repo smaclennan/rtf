@@ -1,13 +1,3 @@
-#include <stdio.h>
-#include <stdlib.h>
-#include <stdint.h>
-#include <stdarg.h>
-#include <string.h>
-#include <unistd.h>
-#include <fcntl.h>
-#include <ctype.h>
-#include <errno.h>
-
 #include <netinet/in.h>
 #include <netinet/tcp.h>
 #include <arpa/inet.h>
@@ -15,11 +5,6 @@
 
 #include "bearssl.h"
 #include "rtf.h"
-
-#define IMAP_SERVER "mail.papamail.net"
-#define IMAP_PORT 993
-#define LOGIN "seanm@seanm.ca"
-#define PASSWD "fcpdkj04xv"
 
 static unsigned last_seen = 1;
 
@@ -56,7 +41,7 @@ static void read_last_seen(void)
 
 static int send_recv(const char *fmt, ...)
 {
-	char match[16];
+	char match[16], *p;
 	int n;
 
 	if (fmt) {
@@ -80,21 +65,28 @@ static int send_recv(const char *fmt, ...)
 		if (n <= 0)
 			return -1;
 
-		sprintf(match, "a%03d OK", cmdno);
+		sprintf(match, "a%03d ", cmdno);
 	} else
-		strcpy(match, "* OK ");
+		strcpy(match, "* ");
 
-	n = ssl_read(buf, sizeof(buf) - 1);
-	if (n > 0) {
+	while (1) {
+		// SAM buffer up?
+		// SAM timeout? ssl_timed_read did not work
+		n = ssl_read(buf, sizeof(buf) - 1);
+		if (n <= 0)
+			return -1;
+
 		buf[n] = 0;
 		if (verbose > 1)
 			printf("S:%d: %s", n, buf);
-		if (strstr(buf, match))
-			return 0;
-		return 1;
+		if ((p = strstr(buf, match))) {
+			p += strlen(match);
+			if (strncmp(p, "OK ", 3) == 0)
+				return 0;
+			printf("Bad reply: %s\n", buf); // SAM DBG
+			return 1;
+		}
 	}
-
-	return -1;
 }
 
 static int fetch(int uid)
@@ -111,71 +103,7 @@ static int fetch(int uid)
 	if (n <= 0)
 		return -1;
 
-#if 0
-	/* First read contains the size */
-	n = ssl_read(buf, sizeof(buf));
-	if (n <= 0)
-		return -1;
-	buf[n] = 0;
-
-	// SAM Exchange does not give a size
-	// SAM re?
-	char *p = strchr(buf, '{');
-	if (!p)
-		return -1;
-	int len = strtol(p + 1, &p, 10);
-	if (*p != '}')
-		return -1;
-	p = strchr(buf, '\n');
-	if (!p)
-		return -1;
-	len -= n - (p - buf - 1);
-
-	if (len > sizeof(buf) - 40) {
-		printf("HEADER TOO LARGE\n");
-		return -1; // SAM what to do?
-	}
-
-	while (len > 0) {
-		int got = ssl_read(buf + n, len);
-		if (got > 0) {
-			n += got;
-			buf[n] = 0;
-			// printf("read %d\n%s\n", n, buf); // SAM DBG
-			// SAM HACK what if returns !OK?
-		} else if(got == 0) {
-			perror("EOF");
-			return -1;
-		} else {
-			perror("read");
-			return -1;
-		}
-
-		len -= got;
-	}
-
-	char final[128];
-	n = ssl_read(final, sizeof(final) - 1);
-	if (n <= 0)
-		return -1;
-
-	final[n] = 0;
-
-	p = final;
-	if (strncmp(p, "\r\n", 2) == 0)
-		p += 2;
-	if (strncmp(p, ")\r\n", 3) == 0)
-		p += 3;
-
-	sprintf(match, "a%03d OK", cmdno);
-	if (strncmp(p, match, strlen(match))) {
-		printf("FAILED\n"); // SAM DBG
-		puts(final); // SAM DBG
-		return 1; // keep going... assume it was dealt with
-	}
-
-	return 0;
-#else
+	// Exchange does not give a size
 	sprintf(match, "\na%03d ", cmdno);
 
 	while (1) {
@@ -202,7 +130,6 @@ static int fetch(int uid)
 			return -1;
 		}
 	}
-#endif
 }
 
 char *fetchline(char *line, int len)
@@ -229,6 +156,7 @@ again:
 
 	if (send_recv("UID SEARCH UID %u:*", last_seen)) {
 		printf("Search failed\n"); // SAM DBG
+		printf(">>> %s", buf); // SAM DBG
 		return -1;
 	}
 
@@ -313,8 +241,7 @@ int process_list(void)
 	return 0;
 }
 
-#define POLLING
-#ifdef POLLING
+// Idling does not work with exchange... just poll
 void run(void)
 {
 	while (1) {
@@ -323,60 +250,6 @@ void run(void)
 		sleep(60);
 	}
 }
-#else
-/* Not sure if this is worth it. Seems to take just as long to get the
- * messages and we do risk missing one.
- */
-static char *nowtime(void)
-{
-	static char nowstr[16];
-	const time_t now = time(NULL);
-	struct tm *tm = localtime(&now);
-	sprintf(nowstr, "%02d:%02d:%02d",
-			tm->tm_hour, tm->tm_min, tm->tm_sec);
-	return nowstr;
-}
-
-// SAM doesn't work with exchange
-void run(void)
-{
-	int n;
-
-	// run it once to catch up
-	process_list();
-
-	while (1) {
-		int rc = send_recv("IDLE");
-		if (rc < 0)
-			return;
-		if (strstr(buf, "+ idling ") == NULL && // for compliant servers
-			strstr(buf, "+ IDLE ") == NULL) // for exchange
-			return;
-
-		printf(">>> %s IDLING\n", nowtime()); // SAM DBG
-
-		while (1) {
-			n = ssl_timed_read(buf, sizeof(buf), 150000); // 2.5 minutes
-			if (n < 0)
-				return;
-			if (n == 0) {
-				puts("TIMEOUT"); // SAM DBG
-				break; // timeout
-			}
-			printf(">>> %s %s", nowtime(), buf); // SAM DBG
-
-			if (strstr(buf, "RECENT") && !strstr(buf, "* 0 RECENT"))
-				break;
-		}
-
-		if (send_recv("DONE"))
-			return;
-
-		if (process_list())
-			return;
-	}
-}
-#endif
 
 #define HANDLE_RC(msg) do {							\
 		if (rc) {									\

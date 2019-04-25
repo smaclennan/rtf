@@ -108,7 +108,6 @@ int main(int argc, char *argv[])
 
 	e = ignorelist;
 	assert(e != NULL);
-	assert(e != NULL);
 	assert(strcmp(e->str, "meh") == 0);
 	assert(e->folder == NULL);
 	e = e->next;
@@ -130,7 +129,6 @@ int main(int argc, char *argv[])
 
 	e = ignorelist;
 	assert(e != NULL);
-	assert(e != NULL);
 	assert(strcmp(e->str, "meh") == 0);
 	assert(e->folder == NULL);
 	e = e->next;
@@ -148,7 +146,6 @@ int main(int argc, char *argv[])
 
 	e = ignorelist;
 	assert(e != NULL);
-	assert(e != NULL);
 	assert(strcmp(e->str, "meh") == 0);
 	assert(e->folder == NULL);
 	assert(e->next == NULL);
@@ -162,6 +159,37 @@ int main(int argc, char *argv[])
 	assert(global == NULL);
 	assert(folderlist == NULL);
 	assert(ignorelist == NULL);
+
+	/* test folderlist */
+	lines[0] = "[folders]";
+	lines[1] = "Review Request=+Reviews";
+	lines[2] = "\\[Confluence]=+Confluence";
+	lines[3] = "<jirabbqnx@blackberry.com>=Bugs";
+	lines[4] = NULL;
+
+	curline = 0;
+	assert(read_config() == 0);
+
+	e = folderlist;
+	assert(e != NULL);
+	assert(strcmp(e->str, "<jirabbqnx@blackberry.com>") == 0);
+	assert(strcmp(e->folder, "Bugs") == 0);
+	e = e->next;
+	assert(e != NULL);
+	assert(strcmp(e->str, "[Confluence]") == 0);
+	assert(strcmp(e->folder, "+Confluence") == 0);
+	e = e->next;
+	assert(e != NULL);
+	assert(strcmp(e->str, "Review Request") == 0);
+	assert(strcmp(e->folder, "+Reviews") == 0);
+	assert(e->next == NULL);
+
+	/* delete everything again */
+	lines[1] = NULL;
+
+	curline = 0;
+	assert(read_config() == 0);
+	assert(folderlist == NULL);
 
 	puts("Success!");
 	return 0;
