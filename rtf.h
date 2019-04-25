@@ -42,6 +42,9 @@
 #ifdef IMAP
 /* imap-rtf only */
 
+/* Largest buffer I have seen is 6,761 */
+#define BUFFER_SIZE (16 * 1024)
+
 // config.c
 struct entry {
 	const char *str;
@@ -80,7 +83,6 @@ void run(void);
 // bear.c
 int ssl_open(int sock, const char *host);
 int ssl_read(char *buffer, int len);
-int ssl_timed_read(char *buffer, int len, int timeout);
 int ssl_write(const char *buffer, int len);
 int ssl_close(void);
 

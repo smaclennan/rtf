@@ -26,6 +26,7 @@ rtf: rtf.c
 
 imap-rtf: imap-rtf.c bear.c eyemap.c config.c
 	$(CC) $(CFLAGS) -DIMAP -o $@ $+ $(LIBS)
+	@etags $+
 
 tarball:
 	rm -rf rtf-$(VERSION)

@@ -60,7 +60,7 @@ static const char *folder_match;
 static const struct entry *saw_bl[2];
 static int add_blacklist;
 
-static char buff[8096];
+static char buff[BUFFER_SIZE];
 
 void logit(void)
 {

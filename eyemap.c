@@ -8,8 +8,7 @@
 
 static unsigned last_seen = 1;
 
-/* Largest buffer I have seen is 6,761 */
-static char buf[16 * 1024];
+static char buf[BUFFER_SIZE];
 static char *curline;
 static int cmdno;
 
@@ -75,7 +74,6 @@ static int send_recv(const char *fmt, ...)
 	char *cur = buf;
 	int len = sizeof(buf);
 	while (1) {
-		// SAM timeout? ssl_timed_read did not work
 		n = ssl_read(cur, len - 1);
 		if (n < 0)
 			return -1;
@@ -87,17 +85,14 @@ static int send_recv(const char *fmt, ...)
 			p += strlen(match);
 			if (strncmp(p, "OK ", 3) == 0)
 				return 0;
-			printf("Bad reply: %s\n", buf); // SAM DBG
 			return 1;
 		}
 
 		cur += n;
 		len -= n;
 
-		if (len < 2) {
-			printf("Buffer overflow!!\n"); // SAM DBG
-			return 0; // SAM try with what we have?
-		}
+		if (len < 2)
+			return 0; /* try with what we have */
 	}
 }
 
@@ -109,9 +104,8 @@ char *fetchline(char *line, int len)
 	char *end = strchr(curline, '\n');
 	if (end)
 		*end++ = 0;
-	int n = snprintf(line, len, "%s", curline);
-	if (n == len)
-		printf("POSSIBLE TRUNCATION\n"); // SAM DBG
+	/* We cannot overflow here since line size == buffer size */
+	strcpy(line, curline);
 	curline = end;
 	return line;
 }

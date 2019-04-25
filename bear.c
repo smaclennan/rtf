@@ -19,7 +19,7 @@ static br_x509_minimal_context xc;
 static unsigned char iobuf[BR_SSL_BUFSIZE_BIDI];
 static br_sslio_context ioc;
 static x509_noanchor_context xwc;
-static int sock_fd;
+static int sock_fd = -1;
 
 static void
 xwc_start_chain(const br_x509_class **ctx, const char *server_name)
@@ -125,24 +125,6 @@ int ssl_open(int sock, const char *host)
 int ssl_read(char *buffer, int len)
 {
 	return br_sslio_read(&ioc, buffer, len);
-}
-
-int ssl_timed_read(char *buffer, int len, int timeout)
-{
-	struct pollfd ufd = { .fd = sock_fd, .events = POLLIN };
-
-	while (1) {
-		int rc = poll(&ufd, 1, timeout);
-		if (rc == 1) {
-			int n = br_sslio_read(&ioc, buffer, len - 1);
-			if (n < 0)
-				return -1;
-			buffer[n] = 0;
-			return 1;
-		}
-		if (rc == 0)
-			return 0; // timeout
-	}
 }
 
 int ssl_write(const char *buffer, int len)
