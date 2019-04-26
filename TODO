@@ -1,11 +1,7 @@
-* -C should check folders for validity?
-
 * time based folder deletion
 
 * should a search failed reconnect?
 
 * dump state?
-
-* better buffering in send_recv
 
 * vet printfs

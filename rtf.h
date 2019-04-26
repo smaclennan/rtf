@@ -49,17 +49,11 @@
 struct entry {
 	const char *str;
 	const char *folder;
-#ifdef IMAP
 	int generation;
-#else
-	regex_t *reg;
-#endif
 	struct entry *next;
 };
 
 extern struct entry *global;
-extern struct entry *melist;
-extern struct entry *fromlist;
 extern struct entry *whitelist;
 extern struct entry *graylist;
 extern struct entry *blacklist;
@@ -93,6 +87,7 @@ int process_list(void);
 char *fetchline(char *buf, int len);
 int imap_move(const char *to);
 void need_reread(int signo);
+int check_folders(void);
 #endif
 
 #endif

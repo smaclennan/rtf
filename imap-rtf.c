@@ -282,7 +282,7 @@ int main(int argc, char *argv[])
 	if (rc)
 		return rc;
 	if (just_checking)
-		return 0;
+		return check_folders();
 
 	if (do_daemon) {
 		if (daemon(1, 0))
