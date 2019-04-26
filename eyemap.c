@@ -120,8 +120,6 @@ again:
 	n_uids = 0;
 
 	if (send_recv("UID SEARCH UID %u:*", last_seen)) {
-		printf("Search failed\n"); // SAM DBG
-		printf(">>> %s", buf); // SAM DBG
 		return -1;
 	}
 
