@@ -117,7 +117,7 @@ int main(int argc, char *argv[])
 			printf("Unable to select %s\n", e->str);
 			continue;
 		}
-		rc = send_recv("UID SEARCH SENTBEFORE %s", date);
+		rc = send_recv("UID SEARCH SENTBEFORE %s SEEN", date);
 		if (rc < 0)
 			goto failed;
 		if (rc > 0) {
