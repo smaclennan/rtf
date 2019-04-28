@@ -65,14 +65,9 @@ int read_config(void);
 
 // imap-rtf.c
 extern int verbose;
-extern int just_checking;
 extern const char *home;
-extern unsigned cur_uid;
 
-void filter(void);
 void logmsg(const char *fmt, ...);
-void logit(void);
-void run(void);
 
 // bear.c
 int ssl_open(int sock, const char *host);
@@ -81,12 +76,12 @@ int ssl_write(const char *buffer, int len);
 int ssl_close(void);
 
 // eyemap.c
+extern char reply[]; // BUFFER_SIZE
+
 int connect_to_server(const char *server, int port,
 					  const char *user, const char *passwd);
-int process_list(void);
+int send_recv(const char *fmt, ...);
 char *fetchline(char *buf, int len);
-int imap_move(const char *to);
-void need_reread(int signo);
 int check_folders(void);
 #endif
 

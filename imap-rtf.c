@@ -62,7 +62,15 @@ static int add_blacklist;
 
 static char buff[BUFFER_SIZE];
 
-void logit(void)
+#define MAX_UIDS 100
+static unsigned uidlist[MAX_UIDS];
+static int n_uids;
+static int did_delete;
+static int reread_config;
+static unsigned last_seen = 1;
+static unsigned cur_uid;
+
+static void logit(void)
 {
 	if (!logfile || (action == 'h' && !log_verbose))
 		return;
@@ -132,7 +140,19 @@ static void safe_rename(const char *path)
 		printf("Action %c\n", action);
 		return;
 	}
-	imap_move(path);
+
+	if (*path == '+') {
+		++path;
+
+		if (send_recv("UID STORE %u +FLAGS.SILENT (\\Seen)", cur_uid))
+			return;
+	}
+
+	if (send_recv("UID COPY %u %s", cur_uid, path))
+		return;
+
+	did_delete = 1;
+	send_recv("UID STORE %u +FLAGS.SILENT (\\Deleted \\Seen)", cur_uid);
 }
 
 static void ham(void)
@@ -193,7 +213,7 @@ static void normalize_subject(const char *str)
 	subject[end + 1] = 0;
 }
 
-void filter(void)
+static void filter(void)
 {
 	const struct entry *e;
 
@@ -245,6 +265,123 @@ void filter(void)
 	}
 }
 
+static void read_last_seen(void)
+{
+	char path[100], buf[32];
+
+	snprintf(path, sizeof(path), "%s/.last-seen", home);
+	int fd = open(path, O_RDONLY);
+	if (fd < 0)
+		return;
+	int n = read(fd, buff, sizeof(buf));
+	close(fd);
+
+	if (n > 0) {
+		last_seen = strtol(buff, NULL, 10);
+		if (verbose)
+			printf("Last seen %u\n", last_seen);
+	} else
+		logmsg("Unable to read .last-seen");
+}
+
+static void write_last_seen(void)
+{
+	char path[100];
+
+	snprintf(path, sizeof(path), "%s/.last-seen", home);
+	FILE *fp = fopen(path, "w");
+	fprintf(fp, "%u\n", last_seen);
+	fclose(fp);
+}
+
+static void need_reread(int signo)
+{
+	reread_config = 1;
+}
+
+static int build_list(void)
+{
+again:
+	n_uids = 0;
+
+	if (send_recv("UID SEARCH UID %u:*", last_seen)) {
+		return -1;
+	}
+
+	/* For some reason if we get "* 1 RECENT" we don't get the
+	 * UIDs. Search again and we do.
+	 */
+	if (strstr(reply, "RECENT"))
+		goto again;
+
+	char *p = strstr(reply, "* SEARCH ");
+	if (p) {
+		p += 9;
+		while ((uidlist[n_uids] = strtol(p, &p, 10)) > 0)
+			// SAM what if we wrap?
+			if (uidlist[n_uids] >= last_seen) {
+				++n_uids;
+				if (n_uids >= MAX_UIDS)
+					break;
+			}
+	}
+
+	return n_uids;
+}
+
+static int process_list(void)
+{
+	int did_something = 0;
+	did_delete = 0;
+
+	do {
+		if (build_list() < 0)
+			return -1;
+
+		for (int i = 0; i < n_uids; ++i) {
+			cur_uid = uidlist[i];
+			if (verbose)
+				printf("Fetch %u\n", cur_uid);
+
+			switch(send_recv("UID FETCH %d (BODY.PEEK[HEADER])", cur_uid)) {
+			case 0:
+				filter();
+				logit();
+				break;
+			case 1:
+				break;
+			default:
+				return -1;
+			}
+
+			last_seen = cur_uid + 1;
+			++did_something;
+		}
+	} while (n_uids);
+
+	if (did_something)
+		write_last_seen();
+
+	if (did_delete)
+		send_recv("EXPUNGE"); // mmmm... sponge...
+
+	return 0;
+}
+
+// Idling does not work with exchange... just poll
+static void run(void)
+{
+	while (1) {
+		if (process_list())
+			return;
+		sleep(60);
+		if (reread_config) {
+			reread_config = 0;
+			read_config();
+		}
+	}
+}
+
 static void usage(void)
 {
 	puts("usage:\trtf [-cdnC] [-{lL} logfile]\n"
@@ -290,6 +427,8 @@ int main(int argc, char *argv[])
 	}
 
 	signal(SIGUSR1, need_reread);
+
+	read_last_seen();
 
 	while (1) {
 		int sock = connect_to_server(get_global("server"),
