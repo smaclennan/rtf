@@ -1,5 +1,5 @@
-/* rtf.c - Really Trivial Filter
- * Copyright (C) 2012-2018 Sean MacLennan <seanm@seanm.ca>
+/* clean-imap.c - clean up folders
+ * Copyright (C) 2019 Sean MacLennan <seanm@seanm.ca>
  *
  * This program is free software: you can redistribute it and/or modify
  * it under the terms of the GNU General Public License as published by
@@ -15,33 +15,8 @@
  * along with this program.  If not, see <http://www.gnu.org/licenses/>.
  */
 
-/* This is a Really Trivial Filter(tm) that allows for filtering email.
- *
- * The filter lists:
- *
- * global - Global settings such as server and user
- * whitelist - To or From that should be marked ham
- * graylist - From that should be ignored
- * blacklist - From or Subject that should be marked spam
- * folders - Email filtering
- *
- * Note: To includes To, Cc, and Bcc.
- *
- * Folder rules: <match>=+?<folder>
- *
- * If a + is put before the folder, the message is also marked read.
- *
- * If folder is the special folder inbox, then we stop traversing the
- * folder list and just leave the message in the INBOX.
- * For example:
- *     [folders]
- *     john Smith=inbox
- *     smith=Smith Folder
- * This would put all Smith's in the Smith Folder except John Smith.
- */
-
 #include "rtf.h"
-#include <sys/signal.h>
+#include <time.h>
 
 int verbose;
 int just_checking;
@@ -368,80 +343,87 @@ static int process_list(void)
 	return 0;
 }
 
-// Idling does not work with exchange... just poll
-static void run(void)
-{
-	while (1) {
-		if (process_list())
-			return;
-		sleep(60);
-		if (reread_config) {
-			reread_config = 0;
-			read_config();
-		}
-	}
-}
+static const char *months[] = {
+	"Jan", "Feb", "Mar", "Apr", "May", "Jun",
+	"Jul", "Aug", "Sep", "Oct", "Nov", "Dec"
+};
 
-static void usage(void)
+static char *datestr(const char *days)
 {
-	puts("usage:\trtf [-cdnC] [-{lL} logfile]\n"
-		 "where:\t-c   add blacklist counts to logfile\n"
-		 "\t-d   daemonize\n"
-		 "\t-h   this help\n"
-		 "\t-n   dry run\n"
-		 "\t-C   just check the config file\n"
-		 "-l only logs messages that match a rule, -L logs everything."
-		);
+	static char date[16];
+	char *e;
+	unsigned n_days = strtoul(days, &e, 10);
+	if (n_days < 2 || *e) {
+		printf("Bad datestr %s\n", days);
+		exit(1); // SAM FIXME
+	}
+	time_t now = time(NULL);
+	struct tm *tm = gmtime(&now);
+	tm->tm_mday -= n_days;
+	now = mktime(tm);
+	tm = gmtime(&now);
+	sprintf(date, "%d-%s-%d", tm->tm_mday, months[tm->tm_mon], tm->tm_year + 1900);
+	return date;
 }
 
 int main(int argc, char *argv[])
 {
-	int c, rc, do_daemon = 0;
-	while ((c = getopt(argc, argv, "cdhl:nvC")) != EOF)
+	int c, rc;
+	while ((c = getopt(argc, argv, "dv")) != EOF)
 		switch (c) {
-		case 'c': add_blacklist = 1; break;
-		case 'd': do_daemon = 1; break;
-		case 'h': usage(); exit(0);
-		case 'L': log_verbose = 1; // fall thru
-		case 'l': logfile = optarg; break;
-		case 'n': dry_run = 1; break;
+		case 'd': home = optarg; break;
 		case 'v': ++verbose; break;
-		case 'C': just_checking = 1; use_stderr = 1; break;
 		}
 
-	home = getenv("HOME");
 	if (!home) {
-		syslog(LOG_WARNING, "You are homeless!");
-		return 1;
+		home = getenv("HOME");
+		if (!home) {
+			syslog(LOG_WARNING, "You are homeless!");
+			return 1;
+		}
 	}
 
 	rc = read_config();
 	if (rc)
-		return rc;
-	if (just_checking)
-		return check_folders();
+		return 1;
 
-	if (do_daemon) {
-		if (daemon(1, 0))
-			logmsg("daemon: %s", strerror(errno));
+	if (!cleanlist)
+		return 0; // nothing to do
+
+	int sock = connect_to_server(get_global("server"),
+								 get_global_num("port"),
+								 get_global("user"),
+								 get_global("passwd"));
+
+	// SAM FIXME check returns
+	rc = 1;
+	for (struct entry *e = cleanlist; e; e = e->next) {
+		send_recv("SELECT %s", e->str);
+		send_recv("UID SEARCH SENTBEFORE %s", datestr(e->folder));
+		char *p = strstr(reply, "* SEARCH ");
+		if (p) {
+			p += 9;
+			char *e = strchr(p, '\n');
+			if (e) {
+				*e = 0;
+
+				strcpy(buff, p); // save list
+				p = buff;
+
+				unsigned uid;
+				while ((uid = strtol(p, &p, 10)) > 0) {
+					send_recv("UID STORE %u +FLAGS.SILENT (\\Seen \\Deleted)", uid);
+				}
+
+				send_recv("EXPUNGE");
+			}
+		}
 	}
 
-	signal(SIGUSR1, need_reread);
+	rc = 0;
 
-	read_last_seen();
-
-	while (1) {
-		int sock = connect_to_server(get_global("server"),
-									 get_global_num("port"),
-									 get_global("user"),
-									 get_global("passwd"));
-
-		run();
-
-		ssl_close();
-		close(sock);
-
-		if (dry_run)
-			exit(42);
-	}
+done:
+	ssl_close();
+	close(sock);
+	return rc;
 }

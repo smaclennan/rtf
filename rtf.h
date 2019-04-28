@@ -58,6 +58,7 @@ extern struct entry *whitelist;
 extern struct entry *graylist;
 extern struct entry *blacklist;
 extern struct entry *folderlist;
+extern struct entry *cleanlist;
 
 const char *get_global(const char *glob);
 int get_global_num(const char *glob);

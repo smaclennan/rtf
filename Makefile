@@ -19,12 +19,16 @@ endif
 
 VERSION=1.1
 
-all: rtf imap-rtf learnem rtfsort regex-check
+all: rtf imap-rtf learnem rtfsort regex-check clean-imap
 
 rtf: rtf.c
 	$(CC) $(CFLAGS) -o $@ $< $(LIBS)
 
 imap-rtf: imap-rtf.c bear.c eyemap.c config.c
+	$(CC) $(CFLAGS) -DIMAP -o $@ $+ $(LIBS)
+	@etags $+
+
+clean-imap: clean-imap.c eyemap.c bear.c config.c
 	$(CC) $(CFLAGS) -DIMAP -o $@ $+ $(LIBS)
 	@etags $+
 

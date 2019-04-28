@@ -7,6 +7,7 @@ struct entry *whitelist;
 struct entry *graylist;
 struct entry *blacklist;
 struct entry *folderlist;
+struct entry *cleanlist;
 
 static int generation;
 
@@ -39,6 +40,10 @@ static int add_entry(struct entry **head, char *str)
 		need_p = 1;
 	}
 	if (head == &folderlist) {
+		p = strchr(str, '=');
+		need_p = 1;
+	}
+	if (head == &cleanlist) {
 		p = strchr(str, '=');
 		need_p = 1;
 	}
@@ -145,6 +150,8 @@ static int read_config_file(const char *fname)
 				head = &blacklist;
 			else if (strcmp(line, "[folders]") == 0)
 				head = &folderlist;
+			else if (strcmp(line, "[clean]") == 0)
+				head = &cleanlist;
 			else {
 				syslog(LOG_INFO, "Unexpected: %s\n", line);
 				head = NULL;
