@@ -145,5 +145,6 @@ failed2:
 	ssl_close();
 failed:
 	close(sock);
+	sleep(5);
 	goto again;
 }
