@@ -15,6 +15,22 @@
  * along with this program.  If not, see <http://www.gnu.org/licenses/>.
  */
 
+/* Remove mail from folder that is older than a given number of
+ * days. If no days are specified, then the default it one week (7
+ * days).
+ *
+ * This is meant to be called from cron. Depending on your cron
+ * program you may need '-d $HOME' to specify the home directory.
+ *
+ * Example:
+ *    [clean]
+ *    Spam
+ *    Mailing List=30
+ * Says to delete spam after 7 days, but keep messages in the "Mailing
+ * List" folder for up to 30 days. Note: Unread messages are never
+ * removed.
+ */
+
 #include "rtf.h"
 #include <time.h>
 
