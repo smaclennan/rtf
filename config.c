@@ -35,17 +35,13 @@ static int add_entry(struct entry **head, char *str)
 
 	if (*str == '\\') ++str;
 
-	if (head == &global) {
-		p = strchr(str, '=');
-		need_p = 1;
-	}
-	if (head == &folderlist) {
+	if (head == &global || head == &folderlist) {
 		p = strchr(str, '=');
 		need_p = 1;
 	}
 	if (head == &cleanlist) {
 		p = strchr(str, '=');
-		need_p = 1;
+		if (p) need_p = 1;
 	}
 
 	if (need_p) {

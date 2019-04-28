@@ -54,12 +54,17 @@ static const char *months[] = {
 static char *datestr(const char *days)
 {
 	static char date[16];
-	char *e;
-	unsigned n_days = strtoul(days, &e, 10);
-	if (n_days < 2 || *e) {
-		logmsg("Bad datestr %s", days);
-		return NULL;
+	unsigned n_days = 7;
+
+	if (days) {
+		char *e;
+		n_days = strtoul(days, &e, 10);
+		if (n_days == 0 || *e) {
+			logmsg("Bad datestr %s", days);
+			return NULL;
+		}
 	}
+
 	time_t now = time(NULL);
 	struct tm *tm = gmtime(&now);
 	tm->tm_mday -= n_days;
@@ -71,10 +76,11 @@ static char *datestr(const char *days)
 
 int main(int argc, char *argv[])
 {
-	int c, rc, ret = 1;
-	while ((c = getopt(argc, argv, "dv")) != EOF)
+	int c, rc, dry_run = 0;
+	while ((c = getopt(argc, argv, "dnv")) != EOF)
 		switch (c) {
 		case 'd': home = optarg; break;
+		case 'n': dry_run = 1; break;
 		case 'v': ++verbose; break;
 		}
 
@@ -87,8 +93,10 @@ int main(int argc, char *argv[])
 	}
 
 	rc = read_config();
-	if (rc)
+	if (rc) {
+		printf("Read config failed\n");
 		return 1;
+	}
 
 	if (!cleanlist)
 		return 0; // nothing to do
@@ -116,32 +124,50 @@ int main(int argc, char *argv[])
 			printf("Search failed for %s\n", e->str);
 			continue;
 		}
-		char *p = strstr(reply, "* SEARCH ");
-		if (p) {
-			p += 9;
-			char *e = strchr(p, '\n');
-			if (e) {
-				*e = 0;
 
-				strcpy(buff, p); // save list
-				p = buff;
-
-				unsigned uid;
-				while ((uid = strtol(p, &p, 10)) > 0) {
-					if (send_recv("UID STORE %u +FLAGS.SILENT (\\Seen \\Deleted)", uid) < 0)
-						goto failed;
-				}
-
-				if (send_recv("EXPUNGE") < 0)
-					goto failed;
+		int found = 0;
+		while (fetchline(buff, sizeof(buff))) {
+			if (strncmp(buff, "* SEARCH", 8) == 0) {
+				found = 1;
+				break;
 			}
+		}
+
+		if (dry_run) {
+			if (found)
+				printf("%s: %s\n", e->str, buff);
+			else
+				printf("%s: Bad search reply\n", e->str);
+			continue;
+		}
+
+		if (found && buff[8] == ' ') {
+			char *p = buff + 9;
+
+			unsigned uid;
+			while ((uid = strtol(p, &p, 10)) > 0) {
+				rc = send_recv("UID STORE %u +FLAGS.SILENT (\\Seen \\Deleted)", uid);
+				if (rc < 0)
+					goto failed;
+				if (rc)
+					printf("%s: UID STORE failed:\n%s", e->str, reply);
+			}
+
+			rc = send_recv("EXPUNGE");
+			if (rc < 0)
+				goto failed;
+			if (rc)
+				printf("%s: EXPUNGE failed:\n%s", e->str, reply);
 		}
 	}
 
-	ret = 0;
-
-failed:
 	ssl_close();
 	close(sock);
-	return ret;
+	return 0;
+
+failed:
+	printf("Connection to server failed\n");
+	ssl_close();
+	close(sock);
+	return 1;
 }

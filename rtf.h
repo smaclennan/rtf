@@ -82,7 +82,7 @@ extern char reply[]; // BUFFER_SIZE
 int connect_to_server(const char *server, int port,
 					  const char *user, const char *passwd);
 int send_recv(const char *fmt, ...);
-char *fetchline(char *buf, int len);
+int fetchline(char *buf, int len);
 int check_folders(void);
 #endif
 

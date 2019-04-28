@@ -67,10 +67,10 @@ int send_recv(const char *fmt, ...)
 	}
 }
 
-char *fetchline(char *line, int len)
+int fetchline(char *line, int len)
 {
 	if (!curline)
-		return NULL;
+		return 0;
 
 	char *end = strchr(curline, '\n');
 	if (end)
@@ -78,7 +78,7 @@ char *fetchline(char *line, int len)
 	/* We cannot overflow here since line size == buffer size */
 	strcpy(line, curline);
 	curline = end;
-	return line;
+	return 1;
 }
 
 #define HANDLE_RC(msg) do {							\
