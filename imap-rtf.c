@@ -51,7 +51,6 @@ const char *home;
 /* We only print the first 42 chars of subject */
 static char subject[48] = { 'N', 'O', 'N', 'E' };
 static char action = '?';
-static int use_stderr;
 static int dry_run;
 
 static unsigned flags;
@@ -106,27 +105,6 @@ static void logit(void)
 		syslog(LOG_ERR, "%s: write error", logfile);
 
 	fclose(fp);
-}
-
-static inline int write_string(char *str)
-{
-	strcat(str, "\n");
-	return write(2, str, strlen(str));
-}
-
-void logmsg(const char *fmt, ...)
-{
-	va_list ap;
-	char msg[128];
-
-	va_start(ap, fmt);
-	vsnprintf(msg, sizeof(msg) - 1, fmt, ap);
-	va_end(ap);
-
-	if (use_stderr)
-		write_string(msg);
-	else
-		syslog(LOG_INFO, "%s", msg);
 }
 
 static void blacklist_count(const struct entry *e, int index)

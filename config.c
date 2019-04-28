@@ -10,6 +10,28 @@ struct entry *folderlist;
 struct entry *cleanlist;
 
 static int generation;
+int use_stderr;
+
+static inline int write_string(char *str)
+{
+	strcat(str, "\n");
+	return write(2, str, strlen(str));
+}
+
+void logmsg(const char *fmt, ...)
+{
+	va_list ap;
+	char msg[128];
+
+	va_start(ap, fmt);
+	vsnprintf(msg, sizeof(msg) - 1, fmt, ap);
+	va_end(ap);
+
+	if (use_stderr)
+		write_string(msg);
+	else
+		syslog(LOG_INFO, "%s", msg);
+}
 
 const char *get_global(const char *glob)
 {
