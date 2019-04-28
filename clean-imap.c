@@ -34,9 +34,6 @@
 #include "rtf.h"
 #include <time.h>
 
-int verbose;
-const char *home;
-
 static char buff[BUFFER_SIZE];
 
 static const char *months[] = {
@@ -76,14 +73,6 @@ int main(int argc, char *argv[])
 		case 'n': dry_run = 1; break;
 		case 'v': ++verbose; break;
 		}
-
-	if (!home) {
-		home = getenv("HOME");
-		if (!home) {
-			syslog(LOG_WARNING, "You are homeless!");
-			return 1;
-		}
-	}
 
 	rc = read_config();
 	if (rc) {

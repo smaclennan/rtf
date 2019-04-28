@@ -9,8 +9,10 @@ struct entry *blacklist;
 struct entry *folderlist;
 struct entry *cleanlist;
 
-static int generation;
+char *home;
+int verbose;
 int use_stderr;
+static int generation;
 
 static inline int write_string(char *str)
 {
@@ -187,6 +189,14 @@ int read_config(void)
 {
 	char fname[128];
 	int rc;
+
+	if (!home) {
+		home = getenv("HOME");
+		if (!home) {
+			syslog(LOG_WARNING, "You are homeless!");
+			return 1;
+		}
+	}
 
 	snprintf(fname, sizeof(fname), "%s/.rtf", home);
 	rc = read_config_file(fname);

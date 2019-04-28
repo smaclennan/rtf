@@ -43,11 +43,9 @@
 #include "rtf.h"
 #include <sys/signal.h>
 
-int verbose;
 int just_checking;
 static const char *logfile;
 static int log_verbose;
-const char *home;
 /* We only print the first 42 chars of subject */
 static char subject[48] = { 'N', 'O', 'N', 'E' };
 static char action = '?';
@@ -431,12 +429,6 @@ int main(int argc, char *argv[])
 		case 'v': ++verbose; break;
 		case 'C': just_checking = 1; use_stderr = 1; break;
 		}
-
-	home = getenv("HOME");
-	if (!home) {
-		syslog(LOG_WARNING, "You are homeless!");
-		return 1;
-	}
 
 	rc = read_config();
 	if (rc)

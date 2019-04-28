@@ -60,16 +60,14 @@ extern struct entry *blacklist;
 extern struct entry *folderlist;
 extern struct entry *cleanlist;
 
+extern char *home;
+extern int verbose;
 extern int use_stderr;
 
 const char *get_global(const char *glob);
 int get_global_num(const char *glob);
 int read_config(void);
 void logmsg(const char *fmt, ...);
-
-// imap-rtf.c
-extern int verbose;
-extern const char *home;
 
 // bear.c
 int ssl_open(int sock, const char *host);
