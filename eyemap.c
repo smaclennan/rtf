@@ -10,6 +10,17 @@ char reply[BUFFER_SIZE];
 static char *curline;
 static int cmdno;
 
+int send_cmd(const char *cmd)
+{
+	++cmdno;
+	int n = sprintf(reply, "a%03d %s\r\n", cmdno, cmd);
+
+	if (verbose > 1)
+		printf("C: %s", reply);
+
+	return ssl_write(reply, n);
+}
+
 int send_recv(const char *fmt, ...)
 {
 	char match[16], *p;

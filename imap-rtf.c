@@ -389,9 +389,9 @@ static int process_list(void)
 	return 0;
 }
 
-// Idling does not work with exchange... just poll
 static void run(void)
 {
+#if 0
 	while (1) {
 		if (process_list())
 			return;
@@ -401,6 +401,54 @@ static void run(void)
 			read_config();
 		}
 	}
+#else
+	while (1) {
+		int n;
+
+		if (process_list())
+			return;
+
+		if (send_cmd("IDLE") <= 0)
+			return;
+
+		n = ssl_read(buff, sizeof(buff) - 1);
+		if (n <= 0)
+			return;
+		buff[n] = 0;
+		if (verbose)
+			printf("S: %s", buff);
+		if (strncmp(buff, "+ idling", 8) && strncmp(buff, "+ IDLE", 6)) {
+			return;
+		}
+
+		while (1) {
+			n = ssl_read(buff, sizeof(buff) - 1);
+			if (n < 0)
+				return;
+			buff[n] = 0;
+
+			if (verbose)
+				printf("S2: %s", buff);
+
+			if (strstr(buff, "RECENT"))
+				break;
+		}
+
+		if (ssl_write("DONE\r\n", 6) <= 0)
+			return;
+
+		// SAM do we need to worry about untagged here?
+		do {
+			n = ssl_read(buff, sizeof(buff) - 1);
+			if (n <= 0)
+				return;
+			buff[n] = 0;
+
+			if (verbose)
+				printf("S: %s", buff);
+		} while (strstr(buff, "OK IDLE"));
+	}
+#endif
 }
 
 static void usage(void)
