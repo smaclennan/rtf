@@ -327,7 +327,7 @@ int main(int argc, char *argv[])
 
 			for (i = 0; i < MAX_FDS; ++i)
 				if (fds[i].revents)
-					read(fds[i].fd, event, sizeof(event));
+					n = read(fds[i].fd, event, sizeof(event));
 #endif
 			timeout = QUEUE_TIMEOUT;
 		}
