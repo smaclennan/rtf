@@ -13,13 +13,14 @@ LIBS += -L/usr/local/lib -lcurl
 endif
 
 ifeq ($(WANT_BEARSSL),1)
+BEARLIB = ./BearSSL/build/libbearssl.a
 CFLAGS += -I./BearSSL/inc
-LIBS += ./BearSSL/build/libbearssl.a
+LIBS += $(BEARLIB)
 endif
 
 VERSION=1.1
 
-all: rtf imap-rtf learnem rtfsort regex-check clean-imap
+all: $(BEARLIB) rtf imap-rtf learnem rtfsort regex-check clean-imap
 
 rtf: rtf.c
 	$(CC) $(CFLAGS) -o $@ $< $(LIBS)
@@ -31,6 +32,9 @@ imap-rtf: imap-rtf.c bear.c eyemap.c config.c
 clean-imap: clean-imap.c eyemap.c bear.c config.c
 	$(CC) $(CFLAGS) -DIMAP -o $@ $+ $(LIBS)
 	@etags $+
+
+$(BEARLIB):
+	make -C BearSSL -j8
 
 tarball:
 	rm -rf rtf-$(VERSION)
@@ -52,3 +56,6 @@ install-strip: install
 
 clean:
 	rm -f rtf imap-rtf learnem rtfsort regex-check TAGS rtf-*.tar.gz
+
+real-clean: clean
+	make -C BearSSL clean
