@@ -43,6 +43,8 @@
 #include "rtf.h"
 #include <sys/signal.h>
 
+#define RFC2177_TIMEOUT (29 * 60 * 1000) // 29 minutes in ms
+
 int just_checking;
 static const char *logfile;
 static int log_verbose;
@@ -422,7 +424,11 @@ static void run(void)
 		}
 
 		while (1) {
-			n = ssl_read(buff, sizeof(buff) - 1);
+			n = ssl_timed_read(buff, sizeof(buff) - 1, 120000);
+			if (n == 0) {
+				puts("TIMEOUT"); // SAM DBG
+				break;
+			}
 			if (n < 0)
 				return;
 			buff[n] = 0;

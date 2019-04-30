@@ -72,6 +72,7 @@ void logmsg(const char *fmt, ...);
 // bear.c
 int ssl_open(int sock, const char *host);
 int ssl_read(char *buffer, int len);
+int ssl_timed_read(char *buffer, int len, int timeout);
 int ssl_write(const char *buffer, int len);
 int ssl_close(void);
 

@@ -127,6 +127,24 @@ int ssl_read(char *buffer, int len)
 	return br_sslio_read(&ioc, buffer, len);
 }
 
+int ssl_timed_read(char *buffer, int len, int timeout)
+{
+	struct pollfd ufd = { .fd = sock_fd, .events = POLLIN };
+	int n;
+
+	while (1)
+		switch(poll(&ufd, 1, timeout)) {
+		case 0: // timeout
+			return 0;
+		case 1:
+			n = br_sslio_read(&ioc, buffer, len);
+			if (n == 0) return -1;
+			return n;
+		default:
+			perror("poll"); // SAM DBG
+		}
+}
+
 int ssl_write(const char *buffer, int len)
 {
 	int rc = br_sslio_write_all(&ioc, buffer, len);
