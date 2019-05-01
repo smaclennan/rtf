@@ -48,8 +48,8 @@
 int just_checking;
 static const char *logfile;
 static int log_verbose;
-/* We only print the first 42 chars of subject */
-static char subject[48] = { 'N', 'O', 'N', 'E' };
+/* We only print the first 54 chars of subject */
+static char subject[55];
 static char action = '?';
 static int dry_run;
 
@@ -69,9 +69,9 @@ static int reread_config;
 static unsigned last_seen = 1;
 static unsigned cur_uid;
 
-static void logit(void)
+static void logit(char action, const char *subject, unsigned cur_uid)
 {
-	if (!logfile || (action == 'h' && !log_verbose))
+	if (!logfile || (action == 'h' && !log_verbose) || dry_run)
 		return;
 
 	FILE *fp = fopen(logfile, "a");
@@ -87,7 +87,7 @@ static void logit(void)
 
 #define OUT(a, c) ((flags & (a)) ? (c) : '-')
 	/* Last two flags are for learnem */
-	fprintf(fp, "%10u %c%c%c%c%c%c%c%c--%c %c %.42s\n", cur_uid,
+	fprintf(fp, "%10u %c%c%c%c%c%c%c%c--%c %c %.54s\n", cur_uid,
 			'-', OUT(SAW_FROM, 'F'), OUT(SAW_DATE, 'D'),
 			OUT(IS_HAM, 'H'), OUT(IS_IGNORED, 'I'), OUT(IS_SPAM, 'S'),
 			'-', '-', '-', action, subject);
@@ -97,7 +97,7 @@ static void logit(void)
 
 		for (i = 0; i < 2; ++i)
 			if (saw_bl[i])
-				fprintf(fp, "%10u B%c-----%c--- %c %.42s\n", cur_uid,
+				fprintf(fp, "%10u B%c-----%c--- %c %.54s\n", cur_uid,
 						i ? 'S' : 'F', '-', action, saw_bl[i]->str);
 	}
 
@@ -195,7 +195,10 @@ static void filter(void)
 {
 	const struct entry *e;
 
+	strcpy(subject, "NONE");
+	flags = 0;
 	folder_match = NULL;
+	memset(saw_bl, 0, sizeof(saw_bl));
 
 	while (fetchline(buff, sizeof(buff))) {
 		if (strncasecmp(buff, "To:", 3) == 0 ||
@@ -369,7 +372,7 @@ static int process_list(void)
 			switch(send_recv("UID FETCH %d (BODY.PEEK[HEADER])", cur_uid)) {
 			case 0:
 				filter();
-				logit();
+				logit(action, subject, cur_uid);
 				break;
 			case 1:
 				break;
@@ -404,6 +407,12 @@ static void run(void)
 		}
 	}
 #else
+	/* RFC2177 recommends timing out the idle every 29 minutes.
+	 * However, exchange server seems to reset the connection
+	 * after about 5 minutes.
+	 */
+	int timeout = is_exchange ? 240000 : RFC2177_TIMEOUT;
+
 	while (1) {
 		int n;
 
@@ -424,7 +433,7 @@ static void run(void)
 		}
 
 		while (1) {
-			n = ssl_timed_read(buff, sizeof(buff) - 1, 120000);
+			n = ssl_timed_read(buff, sizeof(buff) - 1, timeout);
 			if (n == 0) {
 				puts("TIMEOUT"); // SAM DBG
 				break;
@@ -442,17 +451,21 @@ static void run(void)
 
 		if (ssl_write("DONE\r\n", 6) <= 0)
 			return;
+		if (verbose)
+			puts("C: DONE");
 
 		// SAM do we need to worry about untagged here?
-		do {
-			n = ssl_read(buff, sizeof(buff) - 1);
-			if (n <= 0)
-				return;
-			buff[n] = 0;
+		n = ssl_read(buff, sizeof(buff) - 1);
+		if (n <= 0)
+			return;
+		buff[n] = 0;
 
-			if (verbose)
-				printf("S: %s", buff);
-		} while (strstr(buff, "OK IDLE"));
+		if (verbose)
+			printf("S: %s", buff);
+		if (strstr(buff, "OK IDLE") == NULL) {
+			puts("BAD IDLE REPLY"); // SAM DBG
+			return;
+		}
 	}
 #endif
 }
@@ -499,11 +512,18 @@ int main(int argc, char *argv[])
 
 	read_last_seen();
 
+	// Log the start
+	logit('C', "Start", time(NULL));
+
 	while (1) {
 		int sock = connect_to_server(get_global("server"),
 									 get_global_num("port"),
 									 get_global("user"),
 									 get_global("passwd"));
+
+		// Log the connect
+		flags = 0;
+		logit('C', "Connect", time(NULL));
 
 		run();
 

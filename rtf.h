@@ -78,6 +78,7 @@ int ssl_close(void);
 
 // eyemap.c
 extern char reply[]; // BUFFER_SIZE
+extern int is_exchange;
 
 int connect_to_server(const char *server, int port,
 					  const char *user, const char *passwd);

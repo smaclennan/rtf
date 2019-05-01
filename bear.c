@@ -140,8 +140,6 @@ int ssl_timed_read(char *buffer, int len, int timeout)
 			n = br_sslio_read(&ioc, buffer, len);
 			if (n == 0) return -1;
 			return n;
-		default:
-			perror("poll"); // SAM DBG
 		}
 }
 

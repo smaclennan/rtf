@@ -9,6 +9,7 @@
 char reply[BUFFER_SIZE];
 static char *curline;
 static int cmdno;
+int is_exchange;
 
 int send_cmd(const char *cmd)
 {
@@ -140,6 +141,8 @@ again:
 
 	rc = send_recv(NULL);
 	HANDLE_RC("Did not get server OK");
+
+	is_exchange = strstr(reply, "Microsoft Exchange") != NULL;
 
 	rc = send_recv("LOGIN %s %s", user, passwd);
 	HANDLE_RC("Login failed");

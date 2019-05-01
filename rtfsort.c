@@ -507,6 +507,11 @@ int main(int argc, char *argv[])
 				   &flags[4].val, &flags[5].val, &flags[6].val, &flags[7].val,
 				   &learn, &learn_flag, &forward, &action, &n);
 
+		if (action == 'C') {
+			// imap-rtf connect
+			continue;
+		}
+
 		if (!date_in_range(l.fname)) {
 			// printf("Skipping %s\n", l.fname);
 			continue;
