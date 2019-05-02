@@ -408,13 +408,18 @@ static void run(void)
 	}
 #else
 	/* RFC2177 recommends timing out the idle every 29 minutes.
-	 * However, exchange server seems to reset the connection
-	 * after about 5 minutes.
+	 * However, exchange seems to reset the connection after
+	 * about 5 minutes.
 	 */
 	int timeout = is_exchange ? 240000 : RFC2177_TIMEOUT;
 
 	while (1) {
 		int n;
+
+		if (reread_config) {
+			reread_config = 0;
+			read_config();
+		}
 
 		if (process_list())
 			return;
@@ -434,10 +439,8 @@ static void run(void)
 
 		while (1) {
 			n = ssl_timed_read(buff, sizeof(buff) - 1, timeout);
-			if (n == 0) {
-				puts("TIMEOUT"); // SAM DBG
+			if (n == 0)
 				break;
-			}
 			if (n < 0)
 				return;
 			buff[n] = 0;
@@ -454,7 +457,6 @@ static void run(void)
 		if (verbose)
 			puts("C: DONE");
 
-		// SAM do we need to worry about untagged here?
 		n = ssl_read(buff, sizeof(buff) - 1);
 		if (n <= 0)
 			return;
@@ -462,10 +464,8 @@ static void run(void)
 
 		if (verbose)
 			printf("S: %s", buff);
-		if (strstr(buff, "OK IDLE") == NULL) {
-			puts("BAD IDLE REPLY"); // SAM DBG
+		if (strstr(buff, "OK IDLE") == NULL)
 			return;
-		}
 	}
 #endif
 }
