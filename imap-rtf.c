@@ -446,7 +446,7 @@ static void run(void)
 			buff[n] = 0;
 
 			if (verbose)
-				printf("S2: %s", buff);
+				printf("S: %s", buff);
 
 			if (strstr(buff, "RECENT"))
 				break;
@@ -464,7 +464,7 @@ static void run(void)
 
 		if (verbose)
 			printf("S: %s", buff);
-		if (strstr(buff, "OK IDLE") == NULL)
+		if (strstr(buff, " OK ") == NULL)
 			return;
 	}
 #endif
