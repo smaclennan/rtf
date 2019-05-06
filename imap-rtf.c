@@ -369,7 +369,7 @@ static int process_list(void)
 			if (verbose)
 				printf("Fetch %u\n", cur_uid);
 
-			switch(send_recv("UID FETCH %d (BODY.PEEK[HEADER])", cur_uid)) {
+			switch(fetch(cur_uid)) {
 			case 0:
 				filter();
 				logit(action, subject, cur_uid);

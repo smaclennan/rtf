@@ -79,6 +79,33 @@ int send_recv(const char *fmt, ...)
 	}
 }
 
+/* The only purpose of this function is to not display the email
+ * headers if -vv. This makes it easier to log protocol messages.
+ * -vvv will display the headers.
+ */
+int fetch(unsigned uid)
+{
+	int verbose_save = verbose;
+
+	if (verbose) {
+		printf("C: UID FETCH %u (BODY.PEEK[HEADER])\n", uid);
+		if (verbose == 2)
+			verbose = 0;
+	}
+
+	int rc = send_recv("UID FETCH %u (BODY.PEEK[HEADER])", uid);
+
+	verbose = verbose_save;
+	if (verbose == 2) {
+		char *p = strchr(reply, '\n');
+		*p = 0;
+		printf("S: %s\n", reply);
+		*p = '\n';
+	}
+
+	return rc;
+}
+
 int fetchline(char *line, int len)
 {
 	if (!curline)
