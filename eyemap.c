@@ -3,7 +3,6 @@
 #include <arpa/inet.h>
 #include <netdb.h>
 
-#include "bearssl.h"
 #include "rtf.h"
 
 char reply[BUFFER_SIZE];

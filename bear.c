@@ -84,23 +84,26 @@ x509_noanchor_init(x509_noanchor_context *xwc, const br_x509_class **inner)
 	xwc->inner = inner;
 }
 
-static int
-sock_read(void *ctx, unsigned char *buf, size_t len)
+/* The read/write callbacks  cannot return 0. EOF is considered an error. */
+static int sock_read(void *ctx, unsigned char *buf, size_t len)
 {
 	int rlen;
 	do
 		rlen = read(sock_fd, buf, len);
 	while (rlen < 0 && errno == EINTR);
+	if (rlen == 0)
+		return -1;
 	return rlen;
 }
 
-static int
-sock_write(void *ctx, const unsigned char *buf, size_t len)
+static int sock_write(void *ctx, const unsigned char *buf, size_t len)
 {
 	int wlen;
 	do
 		wlen = write(sock_fd, buf, len);
 	while (wlen < 0 && errno == EINTR);
+	if (wlen == 0)
+		return -1;
 	return wlen;
 }
 
