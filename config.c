@@ -210,7 +210,9 @@ int read_config(void)
 				continue;
 			snprintf(fname, sizeof(fname), "%s/.rtf.d/%s", home, ent->d_name);
 			if (strcmp(ent->d_name, "cert") == 0)
-				rc |= ssl_read_cert(fname);
+				rc |= ssl_read_cert(fname, 0);
+			else if (strcmp(ent->d_name, "anchor") == 0)
+				rc |= ssl_read_cert(fname, 1);
 			else
 				rc |= read_config_file(fname);
 		}

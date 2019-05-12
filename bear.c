@@ -6,10 +6,7 @@
 
 /* WARNING: If you do not provide a $HOME/.rtf.d/cert file, then the
  * code falls back to "no anchor" mode. This is very insecure but
- * useful for initially debugging the connetions.
- *
- * Also, if you use a cert you need a way to update it when it
- * expires.
+ * useful for initially debugging the connections.
  */
 
 /* Hint: One what to get the cert:
@@ -23,27 +20,27 @@ massage /tmp/out - You want the second cert
 #include "BearSSL/tools/files.c"
 #include "BearSSL/tools/names.c"
 
-static br_x509_trust_anchor *tas;
-static size_t n_tas;
+typedef VECTOR(br_x509_certificate) cert_list;
+
+static anchor_list anchors = VEC_INIT;
+static cert_list chain = VEC_INIT;
 
 /* Called from read_config(). Note we do not cleanup memory on
  * error. If ssl_read_cert returns non-zero imap-rtf will exit.
  */
-int ssl_read_cert(const char *fname)
+int ssl_read_cert(const char *fname, int anchor)
 {
-	br_x509_certificate *xcs = read_certificates(fname, &n_tas);
-	if (xcs == NULL)
-		return 1;
-
-	tas = calloc(n_tas, sizeof(br_x509_trust_anchor));
-	if (!tas)
-		return 1;
-
-	for (size_t u = 0; u < n_tas; u ++)
-		if (certificate_to_trust_anchor_inner(&tas[u], &xcs[u]) < 0)
+	if (anchor) {
+		if (read_trust_anchors(&anchors, fname) == 0)
 			return 1;
-
-	free_certificates(xcs, n_tas);
+	} else {
+		size_t num;
+		br_x509_certificate *xcs = read_certificates(fname, &num);
+		if (xcs == NULL)
+			return 1;
+		VEC_ADDMANY(chain, xcs, num);
+		xfree(xcs);
+	}
 	return 0;
 }
 
@@ -79,13 +76,34 @@ static int sock_write(void *ctx, const unsigned char *buf, size_t len)
 
 int ssl_open(int sock, const char *host)
 {
-	br_ssl_client_init_full(&sc, &xc, tas, n_tas);
+	if (VEC_LEN(anchors) == 0) {
+		size_t num = VEC_LEN(chain);
 
-	if (tas == NULL) {
-		logmsg("Warning: No cert");
-		xwc.vtable = &x509_noanchor_vtable;
-		xwc.inner = &xwc.vtable;
-		br_ssl_engine_set_x509(&sc.eng, &xwc.vtable);
+		if (num == 0) {
+			logmsg("Warning: No cert");
+			xwc.vtable = &x509_noanchor_vtable;
+			xwc.inner = &xwc.vtable;
+			br_ssl_engine_set_x509(&sc.eng, &xwc.vtable);
+		} else {
+			// Convert certs to trust anchors
+			anchor_list tas = VEC_INIT;
+
+			for (size_t u = 0; u < num; u++) {
+				br_x509_trust_anchor ta;
+
+				if (certificate_to_trust_anchor_inner(&ta, &VEC_ELT(chain, u)) < 0)
+					return 1;
+
+				VEC_ADD(tas, ta);
+			}
+			VEC_ADDMANY(anchors, &VEC_ELT(tas, 0), num);
+			VEC_CLEAR(tas);
+			free_certificates(&VEC_ELT(chain, 0), num);
+		}
+
+		br_ssl_client_init_full(&sc, &xc, &VEC_ELT(anchors, 0), VEC_LEN(anchors));
+	} else {
+		// SAM FIXME
 	}
 
 	br_ssl_engine_set_buffer(&sc.eng, iobuf, sizeof iobuf, 1);

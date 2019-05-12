@@ -75,7 +75,7 @@ int ssl_read(char *buffer, int len);
 int ssl_timed_read(char *buffer, int len, int timeout);
 int ssl_write(const char *buffer, int len);
 int ssl_close(void);
-int ssl_read_cert(const char *fname);
+int ssl_read_cert(const char *fname, int anchor);
 
 // eyemap.c
 extern char reply[]; // BUFFER_SIZE
