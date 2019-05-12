@@ -513,7 +513,8 @@ int main(int argc, char *argv[])
 	read_last_seen();
 
 	// Log the start
-	logit('C', "Start", time(NULL));
+	sprintf(reply, "Start %d", getpid());
+	logit('C', reply, time(NULL));
 
 	while (1) {
 		int sock = connect_to_server(get_global("server"),

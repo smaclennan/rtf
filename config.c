@@ -209,7 +209,10 @@ int read_config(void)
 			if (*ent->d_name == '.')
 				continue;
 			snprintf(fname, sizeof(fname), "%s/.rtf.d/%s", home, ent->d_name);
-			rc |= read_config_file(fname);
+			if (strcmp(ent->d_name, "cert") == 0)
+				rc |= ssl_read_cert(fname);
+			else
+				rc |= read_config_file(fname);
 		}
 		closedir(dir);
 	}
