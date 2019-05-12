@@ -71,14 +71,13 @@ int ssl_open(int sock, const char *host)
 	if (verbose)
 		printf("Anchors %ld\n", VEC_LEN(anchors));
 
+	br_ssl_client_init_full(&sc, &mc, &VEC_ELT(anchors, 0), VEC_LEN(anchors));
+
 	if (VEC_LEN(anchors) == 0) {
 		logmsg("Warning: No cert");
-		xwc.vtable = &x509_noanchor_vtable;
-		xwc.inner = &xwc.vtable;
+		x509_noanchor_init(&xwc, &mc.vtable);
 		br_ssl_engine_set_x509(&sc.eng, &xwc.vtable);
 	}
-
-	br_ssl_client_init_full(&sc, &mc, &VEC_ELT(anchors, 0), VEC_LEN(anchors));
 
 	br_ssl_engine_set_buffer(&sc.eng, iobuf, sizeof iobuf, 1);
 
