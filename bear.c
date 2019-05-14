@@ -2,6 +2,7 @@
 #include <errno.h>
 #include <sys/poll.h>
 #include "bearssl.h"
+#include "brssl.h"
 #include "rtf.h"
 
 /* WARNING: If you do not provide a $HOME/.rtf.d/cert file, then the
@@ -14,25 +15,13 @@ openssl s_client -connect google.ca:443 -showcerts > /tmp/out
 massage /tmp/out - You want the second cert
 */
 
-#include "BearSSL/tools/certs.c"
-#include "BearSSL/tools/xmem.c"
-#include "BearSSL/tools/vector.c"
-#include "BearSSL/tools/files.c"
-#include "BearSSL/tools/names.c"
-
-typedef VECTOR(br_x509_certificate) cert_list;
-
 static anchor_list anchors = VEC_INIT;
 
-/* Called from read_config(). Note we do not cleanup memory on
- * error. If ssl_read_cert returns non-zero imap-rtf will exit.
- */
+/* Called from read_config(). */
 int ssl_read_cert(const char *fname)
 {
-	if (read_trust_anchors(&anchors, fname) == 0) {
-		logmsg("Bad cert file %s\n", fname);
+	if (read_trust_anchors(&anchors, fname) == 0)
 		return 1;
-	}
 	return 0;
 }
 
@@ -68,9 +57,6 @@ static int sock_write(void *ctx, const unsigned char *buf, size_t len)
 
 int ssl_open(int sock, const char *host)
 {
-	if (verbose)
-		printf("Anchors %ld\n", VEC_LEN(anchors));
-
 	br_ssl_client_init_full(&sc, &mc, &VEC_ELT(anchors, 0), VEC_LEN(anchors));
 
 	if (VEC_LEN(anchors) == 0) {
@@ -81,10 +67,8 @@ int ssl_open(int sock, const char *host)
 
 	br_ssl_engine_set_buffer(&sc.eng, iobuf, sizeof iobuf, 1);
 
-	if (br_ssl_client_reset(&sc, host, 0) == 0) {
-		logmsg("client reset %d", br_ssl_engine_last_error(&sc.eng));
+	if (br_ssl_client_reset(&sc, host, 0) == 0)
 		return 1;
-	}
 
 	sock_fd = sock;
 	br_sslio_init(&ioc, &sc.eng, sock_read, &sock_fd, sock_write, &sock_fd);
@@ -120,10 +104,11 @@ int ssl_write(const char *buffer, int len)
 	return rc == 0 ? len : -1;
 }
 
-int ssl_close(void)
+void ssl_close(void)
 {
 	if (br_ssl_engine_current_state(&sc.eng) == BR_SSL_CLOSED) {
-		return br_ssl_engine_last_error(&sc.eng);
+		int err = br_ssl_engine_last_error(&sc.eng);
+		if (err)
+			logmsg("SSL error %d", err);
 	}
-	return 0;
 }
