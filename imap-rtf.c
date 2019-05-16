@@ -71,7 +71,9 @@ static unsigned cur_uid;
 
 static void logit(char action, const char *subject, unsigned cur_uid)
 {
-	if (!logfile || (action == 'h' && !log_verbose) || dry_run)
+	if (!logfile || dry_run)
+		return;
+	if (!log_verbose && (action == 'h' || action == 'H'))
 		return;
 
 	FILE *fp = fopen(logfile, "a");
@@ -112,38 +114,39 @@ static void blacklist_count(const struct entry *e, int index)
 	saw_bl[index] = e;
 }
 
-static void safe_rename(const char *path)
+static int safe_rename(const char *path)
 {
 	if (dry_run) {
 		printf("Action %c\n", action);
-		return;
+		return 0;
 	}
 
 	if (*path == '+') {
 		++path;
 
 		if (send_recv("UID STORE %u +FLAGS.SILENT (\\Seen)", cur_uid))
-			return;
+			return -1;
 	}
 
 	if (send_recv("UID COPY %u %s", cur_uid, path))
-		return;
+		return -1;
 
 	did_delete = 1;
-	send_recv("UID STORE %u +FLAGS.SILENT (\\Deleted \\Seen)", cur_uid);
+	return send_recv("UID STORE %u +FLAGS.SILENT (\\Deleted \\Seen)", cur_uid);
 }
 
-static void ham(void)
+static int ham(void)
 {
 	if (folder_match && strcmp(folder_match, "inbox")) {
 		action = 'f';
-		safe_rename(folder_match);
+		return safe_rename(folder_match);
 	}
+	return 0;
 }
 
-static inline void spam(void) { safe_rename(get_global("blacklist")); }
+static inline int spam(void) { return safe_rename(get_global("blacklist")); }
 
-static inline void ignore(void) { safe_rename(get_global("graylist")); }
+static inline int ignore(void) { return safe_rename(get_global("graylist")); }
 
 static const struct entry *list_filter(const char *line, struct entry * const head)
 {
@@ -191,7 +194,7 @@ static void normalize_subject(const char *str)
 	subject[end + 1] = 0;
 }
 
-static void filter(void)
+static int filter(void)
 {
 	const struct entry *e;
 
@@ -232,18 +235,22 @@ static void filter(void)
 
 	if (flags & IS_IGNORED) {
 		action = 'I';
-		ignore();
-	} else if (flags & IS_HAM) {
-		action = 'H';
-		ham();
-	} else if ((flags & IS_SPAM) ||
-			   (flags & SAW_FROM) == 0 || (flags & SAW_DATE) == 0) {
-		action = 'S';
-		spam();
-	} else {
-		action = 'h';
-		ham();
+		return ignore();
 	}
+
+	if (flags & IS_HAM) {
+		action = 'H';
+		return ham();
+	}
+
+	if ((flags & IS_SPAM) ||
+		(flags & SAW_FROM) == 0 || (flags & SAW_DATE) == 0) {
+		action = 'S';
+		return spam();
+	}
+
+	action = 'h';
+	return ham();
 }
 
 static void read_last_seen(void)
@@ -371,7 +378,8 @@ static int process_list(void)
 
 			switch(fetch(cur_uid)) {
 			case 0:
-				filter();
+				if (filter())
+					return -1;
 				logit(action, subject, cur_uid);
 				break;
 			case 1:
@@ -418,6 +426,7 @@ static void run(void)
 
 		if (reread_config) {
 			reread_config = 0;
+			logit('C', "re-read config", time(NULL));
 			read_config();
 		}
 

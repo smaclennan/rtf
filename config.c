@@ -223,14 +223,13 @@ int read_config(void)
 	check_list(&blacklist);
 	check_list(&folderlist);
 
-	if (generation == 0)
-		if (!get_global("server") ||
-			get_global_num("port") == 0 ||
-			!get_global("user") ||
-			!get_global("passwd")) {
-			logmsg("Missing required global(s)");
-			rc = 1;
-		}
+	if (!get_global("server") ||
+		get_global_num("port") == 0 ||
+		!get_global("user") ||
+		!get_global("passwd")) {
+		logmsg("Missing required global(s)");
+		rc = 1;
+	}
 
 	if (graylist && !get_global("graylist")) {
 		logmsg("graylist global missing");
