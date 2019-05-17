@@ -426,6 +426,7 @@ static void run(void)
 
 		if (reread_config) {
 			reread_config = 0;
+			flags = 0;
 			logit('C', "re-read config", time(NULL));
 			read_config();
 		}
