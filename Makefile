@@ -2,7 +2,6 @@
 # returns -g, else it returns the default (-O2).
 D = -O2
 CFLAGS += -Wall $(D:1=-g)
-CFLAGS += -I/usr/local/include
 
 WANT_FORWARDING=0
 WANT_BEARSSL=1
@@ -13,8 +12,9 @@ LIBS += -L/usr/local/lib -lcurl
 endif
 
 ifeq ($(WANT_BEARSSL),1)
-BEARLIB = ./BearSSL/build/libbearssl.a
-CFLAGS += -I./BearSSL/inc
+BEARDIR ?= ./BearSSL
+BEARLIB = $(BEARDIR)/build/libbearssl.a
+CFLAGS += -I $(BEARDIR)/inc
 LIBS += $(BEARLIB)
 endif
 
