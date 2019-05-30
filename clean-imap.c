@@ -64,6 +64,8 @@ static char *datestr(const char *days)
 	return date;
 }
 
+void uid_validity(void) {} /* Don't care */
+
 int main(int argc, char *argv[])
 {
 	int c, rc, dry_run = 0;

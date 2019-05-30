@@ -60,6 +60,8 @@ int send_recv(const char *fmt, ...)
 		if (n < 0)
 			return -1;
 
+		uid_validity();
+
 		cur[n] = 0;
 		if (verbose > 1)
 			printf("S:%d: %s", n, cur);

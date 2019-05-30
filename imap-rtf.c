@@ -63,6 +63,7 @@ static unsigned uidlist[MAX_UIDS];
 static int n_uids;
 static int did_delete;
 static int reread_config;
+static unsigned uidvalidity;
 static unsigned last_seen = 1;
 static unsigned cur_uid;
 
@@ -254,7 +255,11 @@ static void read_last_seen(void)
 	close(fd);
 
 	if (n > 0) {
-		last_seen = strtol(buff, NULL, 10);
+		char *e;
+
+		last_seen = strtol(buff, &e, 10);
+		if (*e == ':')
+			uidvalidity = strtol(e + 1, NULL, 10);
 		if (verbose)
 			printf("Last seen %u\n", last_seen);
 	} else
@@ -267,7 +272,7 @@ static void write_last_seen(void)
 
 	snprintf(path, sizeof(path), "%s/.last-seen", home);
 	FILE *fp = fopen(path, "w");
-	fprintf(fp, "%u\n", last_seen);
+	fprintf(fp, "%u:%u\n", last_seen, uidvalidity);
 	fclose(fp);
 }
 
@@ -340,7 +345,6 @@ again:
 	if (p) {
 		p += 9;
 		while ((uidlist[n_uids] = strtol(p, &p, 10)) > 0)
-			// SAM what if we wrap?
 			if (uidlist[n_uids] >= last_seen) {
 				++n_uids;
 				if (n_uids >= MAX_UIDS)
@@ -349,6 +353,27 @@ again:
 	}
 
 	return n_uids;
+}
+
+/* Called from send_recv() */
+void uid_validity(void)
+{
+	char *p = strstr(reply, "[UIDVALIDITY");
+	if (p) {
+		char *e;
+		unsigned valid = strtol(p + 12, &e, 10);
+		if (*e == ']') {
+			if (uidvalidity) {
+				if (uidvalidity != valid) {
+					logmsg("RESET: uidvalidity was %u now %u", uidvalidity, valid);
+					logit('C', "uidvalidity changed", time(NULL));
+					uidvalidity = valid;
+					last_seen = 1;
+				}
+			} else
+				uidvalidity = valid;
+		}
+	}
 }
 
 static int process_list(void)
