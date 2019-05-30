@@ -144,7 +144,16 @@ static int ham(void)
 	return 0;
 }
 
-static inline int spam(void) { return safe_rename(get_global("blacklist")); }
+static inline int spam(void)
+{
+	const char *bl = get_global("blacklist");
+	if (!bl) {
+		/* This can happen with no from and/or date */
+		logmsg("Spam and no blacklist in global section");
+		return 0;
+	}
+	return safe_rename(bl);
+}
 
 static inline int ignore(void) { return safe_rename(get_global("graylist")); }
 
