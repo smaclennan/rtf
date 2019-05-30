@@ -56,9 +56,6 @@ static int dry_run;
 static unsigned flags;
 static const char *folder_match;
 
-static const struct entry *saw_bl[2];
-static int add_blacklist;
-
 static char buff[BUFFER_SIZE];
 
 #define MAX_UIDS 100
@@ -94,24 +91,10 @@ static void logit(char action, const char *subject, unsigned cur_uid)
 			OUT(IS_HAM, 'H'), OUT(IS_IGNORED, 'I'), OUT(IS_SPAM, 'S'),
 			'-', '-', '-', action, subject);
 
-	if (add_blacklist) {
-		int i;
-
-		for (i = 0; i < 2; ++i)
-			if (saw_bl[i])
-				fprintf(fp, "%10u B%c-----%c--- %c %.54s\n", cur_uid,
-						i ? 'S' : 'F', '-', action, saw_bl[i]->str);
-	}
-
 	if (ferror(fp))
 		syslog(LOG_ERR, "%s: write error", logfile);
 
 	fclose(fp);
-}
-
-static void blacklist_count(const struct entry *e, int index)
-{
-	saw_bl[index] = e;
 }
 
 static int safe_rename(const char *path)
@@ -176,10 +159,8 @@ static inline void filter_from(const char *from)
 		flags |= IS_HAM;
 	if (list_filter(from, graylist))
 		flags |= IS_IGNORED;
-	if ((e = list_filter(from, blacklist))) {
+	if ((e = list_filter(from, blacklist)))
 		flags |= IS_SPAM;
-		blacklist_count(e, 0);
-	}
 }
 
 static void normalize_subject(const char *str)
@@ -208,9 +189,9 @@ static int filter(void)
 	const struct entry *e;
 
 	strcpy(subject, "NONE");
+	action = '?';
 	flags = 0;
 	folder_match = NULL;
-	memset(saw_bl, 0, sizeof(saw_bl));
 
 	while (fetchline(buff, sizeof(buff))) {
 		if (strncasecmp(buff, "To:", 3) == 0 ||
@@ -227,10 +208,9 @@ static int filter(void)
 				folder_match = e->folder;
 		} else if (strncasecmp(buff, "Subject:", 8) == 0) {
 			normalize_subject(buff);
-			if ((e = list_filter(buff, blacklist))) {
+			if ((e = list_filter(buff, blacklist)))
 				flags |= IS_SPAM;
-				blacklist_count(e, 1);
-			} else if ((e = list_filter(buff, folderlist)))
+			else if ((e = list_filter(buff, folderlist)))
 				folder_match = e->folder;
 		} else if (strncasecmp(buff, "Date:", 5) == 0)
 			flags |= SAW_DATE;
@@ -491,11 +471,11 @@ static void run(void)
 
 static void usage(void)
 {
-	puts("usage:\trtf [-cdnC] [-{lL} logfile]\n"
-		 "where:\t-c   add blacklist counts to logfile\n"
-		 "\t-d   daemonize\n"
+	puts("usage:\trtf [-dhnvC] [-{lL} logfile]\n"
+		 "where:\t-d   daemonize\n"
 		 "\t-h   this help\n"
 		 "\t-n   dry run\n"
+		 "\t-v   more verbose\n"
 		 "\t-C   just check the config file\n"
 		 "-l only logs messages that match a rule, -L logs everything."
 		);
@@ -504,9 +484,8 @@ static void usage(void)
 int main(int argc, char *argv[])
 {
 	int c, rc, do_daemon = 0;
-	while ((c = getopt(argc, argv, "cdhl:nvC")) != EOF)
+	while ((c = getopt(argc, argv, "dhl:nvC")) != EOF)
 		switch (c) {
-		case 'c': add_blacklist = 1; break;
 		case 'd': do_daemon = 1; break;
 		case 'h': usage(); exit(0);
 		case 'L': log_verbose = 1; // fall thru
