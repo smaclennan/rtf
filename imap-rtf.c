@@ -526,11 +526,6 @@ int main(int argc, char *argv[])
 	if (just_checking)
 		return check_folders();
 
-	if (do_daemon) {
-		if (daemon(1, 0))
-			logmsg("daemon: %s", strerror(errno));
-	}
-
 	signal(SIGUSR1, need_reread);
 
 	read_last_seen();
@@ -548,6 +543,13 @@ int main(int argc, char *argv[])
 		// Log the connect
 		flags = 0;
 		logit('C', "Connect", time(NULL));
+
+		if (do_daemon) {
+			// Only go daemon if first connect was a success
+			if (daemon(1, 0))
+				logmsg("daemon: %s", strerror(errno));
+			do_daemon = 0;
+		}
 
 		run();
 
