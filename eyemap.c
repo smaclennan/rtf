@@ -121,10 +121,27 @@ int fetchline(char *line, int len)
 	return 1;
 }
 
+static void get_hostip(const char *server, unsigned connected, uint32_t *host_ip)
+{
+	if (connected != 1) {
+		struct hostent *host = gethostbyname(server);
+		if (host)
+			*host_ip = *(uint32_t *)host->h_addr_list[0];
+		else {
+			logmsg("Unable to get host %s (%d)", server, connected);
+			if (connected == 0)
+				exit(1);
+			// retry old host
+		}
+	}
+}
+
 #define HANDLE_RC(msg) do {							\
 		if (rc) {									\
 			logmsg(msg);							\
 			if ((rc) < 0)							\
+				goto failed2;						\
+			if (connected)							\
 				goto failed2;						\
 			exit(2);								\
 		}											\
@@ -133,16 +150,13 @@ int fetchline(char *line, int len)
 int connect_to_server(const char *server, int port,
 					  const char *user, const char *passwd)
 {
-	int sock, rc;
+	static unsigned connected;
+	static uint32_t host_ip;
 
-	struct hostent *host = gethostbyname(server);
-	if (!host) {
-		logmsg("Unable to get host %s", server);
-		exit(1);
-	}
+again: ;
+	get_hostip(server, connected, &host_ip);
 
-again:
-	sock = socket(AF_INET, SOCK_STREAM, 0);
+	int sock = socket(AF_INET, SOCK_STREAM, 0);
 	if (sock == -1) {
 		logmsg("socket: %s", strerror(errno));
 		goto failed;
@@ -154,7 +168,7 @@ again:
 	struct sockaddr_in sock_name;
 	memset(&sock_name, 0, sizeof(sock_name));
 	sock_name.sin_family = AF_INET;
-	sock_name.sin_addr.s_addr = *(uint32_t *)host->h_addr_list[0];
+	sock_name.sin_addr.s_addr = host_ip;
 	sock_name.sin_port = htons(port);
 
 	if (connect(sock, (struct sockaddr *)&sock_name, sizeof(sock_name))) {
@@ -167,7 +181,7 @@ again:
 		goto failed;
 	}
 
-	rc = send_recv(NULL);
+	int rc = send_recv(NULL);
 	HANDLE_RC("Did not get server OK");
 
 	is_exchange = strstr(reply, "Microsoft Exchange") != NULL;
@@ -181,6 +195,8 @@ again:
 	if (verbose)
 		printf("Connected.\n");
 
+	connected = 1;
+
 	return sock; // connected
 
 failed2:
@@ -188,5 +204,6 @@ failed2:
 failed:
 	close(sock);
 	sleep(5);
+	++connected;
 	goto again;
 }
