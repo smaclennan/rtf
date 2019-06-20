@@ -153,7 +153,7 @@ int connect_to_server(const char *server, int port,
 	static unsigned connected;
 	static uint32_t host_ip;
 
-again: ;
+again:
 	get_hostip(server, connected, &host_ip);
 
 	int sock = socket(AF_INET, SOCK_STREAM, 0);
