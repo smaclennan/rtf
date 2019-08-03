@@ -123,16 +123,14 @@ int fetchline(char *line, int len)
 
 static void get_hostip(const char *server, unsigned connected, uint32_t *host_ip)
 {
-	if (connected != 1) {
-		struct hostent *host = gethostbyname(server);
-		if (host)
-			*host_ip = *(uint32_t *)host->h_addr_list[0];
-		else {
-			logmsg("Unable to get host %s (%d)", server, connected);
-			if (connected == 0)
-				exit(1);
-			// retry old host
-		}
+	struct hostent *host = gethostbyname(server);
+	if (host)
+		*host_ip = *(uint32_t *)host->h_addr_list[0];
+	else {
+		logmsg("Unable to get host %s (%d)", server, connected);
+		if (connected == 0)
+			exit(1);
+		// retry old host
 	}
 }
 
@@ -204,6 +202,5 @@ failed2:
 failed:
 	close(sock);
 	sleep(5);
-	++connected;
 	goto again;
 }
