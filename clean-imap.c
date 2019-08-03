@@ -65,6 +65,7 @@ static char *datestr(const char *days)
 }
 
 void uid_validity(void) {} /* Don't care */
+void do_reload(void) {} /* Don't care */
 
 int main(int argc, char *argv[])
 {

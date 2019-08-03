@@ -416,6 +416,16 @@ static int process_list(void)
 	return 0;
 }
 
+void do_reload(void)
+{
+	if (reread_config) {
+		reread_config = 0;
+		flags = 0;
+		logit('C', "re-read config", time(NULL));
+		read_config();
+	}
+}
+
 static void run(void)
 {
 #if 0
@@ -438,12 +448,8 @@ static void run(void)
 	while (1) {
 		int n;
 
-		if (reread_config) {
-			reread_config = 0;
-			flags = 0;
-			logit('C', "re-read config", time(NULL));
-			read_config();
-		}
+		if (reread_config)
+			do_reload();
 
 		if (process_list())
 			return;
