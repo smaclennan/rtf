@@ -69,7 +69,6 @@ int get_global_num(const char *glob);
 int read_config(void);
 void logmsg(const char *fmt, ...);
 void uid_validity(void);
-void do_reload(void);
 
 // bear.c
 int ssl_open(int sock, const char *host);

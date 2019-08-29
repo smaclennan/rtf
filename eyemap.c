@@ -121,40 +121,18 @@ int fetchline(char *line, int len)
 	return 1;
 }
 
-static void get_hostip(const char *server, unsigned connected, uint32_t *host_ip)
-{
-	struct hostent *host = gethostbyname(server);
-	if (host)
-		*host_ip = *(uint32_t *)host->h_addr_list[0];
-	else {
-		logmsg("Unable to get host %s (%d)", server, connected);
-		if (connected == 0)
-			exit(1);
-		// retry old host
-	}
-}
-
-#define HANDLE_RC(msg) do {							\
-		if (rc) {									\
-			logmsg(msg);							\
-			if ((rc) < 0)							\
-				goto failed2;						\
-			if (connected)							\
-				goto failed2;						\
-			exit(2);								\
-		}											\
-	} while (0)
+static uint32_t host_ip;
 
 int connect_to_server(const char *server, int port,
 					  const char *user, const char *passwd)
 {
-	static unsigned connected;
-	static uint32_t host_ip;
-
-again:
-	do_reload();
-
-	get_hostip(server, connected, &host_ip);
+	struct hostent *host = gethostbyname(server);
+	if (host)
+		host_ip = *(uint32_t *)host->h_addr_list[0];
+	else
+		logmsg("Unable to get host %s", server);
+	if (host_ip == 0)
+		return -1;
 
 	int sock = socket(AF_INET, SOCK_STREAM, 0);
 	if (sock == -1) {
@@ -181,28 +159,30 @@ again:
 		goto failed;
 	}
 
-	int rc = send_recv(NULL);
-	HANDLE_RC("Did not get server OK");
+	if (send_recv(NULL)) {
+		logmsg("Did not get server OK");
+		goto failed;
+	}
 
 	is_exchange = strstr(reply, "Microsoft Exchange") != NULL;
 
-	rc = send_recv("LOGIN %s %s", user, passwd);
-	HANDLE_RC("Login failed");
+	if (send_recv("LOGIN %s %s", user, passwd)) {
+		logmsg("Login failed");
+		goto failed;
+	}
 
-	rc = send_recv("SELECT INBOX");
-	HANDLE_RC("Select failed");
+	if (send_recv("SELECT INBOX")) {
+		logmsg("Select failed");
+		goto failed;
+	}
 
 	if (verbose)
 		printf("Connected.\n");
 
-	connected = 1;
-
 	return sock; // connected
 
-failed2:
-	ssl_close();
 failed:
+	ssl_close();
 	close(sock);
-	sleep(5);
-	goto again;
+	return -1;
 }

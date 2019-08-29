@@ -304,6 +304,8 @@ int check_folders(void)
 								 get_global_num("port"),
 								 get_global("user"),
 								 get_global("passwd"));
+	if (sock < 0)
+		return 1;
 
 	send_recv("LIST \"\" \"*\"");
 
@@ -416,7 +418,7 @@ static int process_list(void)
 	return 0;
 }
 
-void do_reload(void)
+static void do_reload(void)
 {
 	if (reread_config) {
 		reread_config = 0;
@@ -545,13 +547,18 @@ int main(int argc, char *argv[])
 									 get_global_num("port"),
 									 get_global("user"),
 									 get_global("passwd"));
+		if  (sock < 0) {
+			sleep(5);
+			do_reload();
+			continue;
+		}
 
 		// Log the connect
 		flags = 0;
 		logit('C', "Connect", time(NULL));
 
 		if (do_daemon) {
-			// Only go daemon if first connect was a success
+			// Only go daemon if connected
 			if (daemon(1, 0))
 				logmsg("daemon: %s", strerror(errno));
 			do_daemon = 0;

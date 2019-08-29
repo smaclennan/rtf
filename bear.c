@@ -106,9 +106,12 @@ int ssl_write(const char *buffer, int len)
 
 void ssl_close(void)
 {
+	if (sock_fd == -1)
+		return;
 	if (br_ssl_engine_current_state(&sc.eng) == BR_SSL_CLOSED) {
 		int err = br_ssl_engine_last_error(&sc.eng);
 		if (err)
 			logmsg("SSL error %d", err);
 	}
+	sock_fd = -1;
 }

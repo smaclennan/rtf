@@ -65,7 +65,6 @@ static char *datestr(const char *days)
 }
 
 void uid_validity(void) {} /* Don't care */
-void do_reload(void) {} /* Don't care */
 
 int main(int argc, char *argv[])
 {
@@ -90,6 +89,8 @@ int main(int argc, char *argv[])
 								 get_global_num("port"),
 								 get_global("user"),
 								 get_global("passwd"));
+	if (sock < 0)
+		exit(1);
 
 	for (struct entry *e = cleanlist; e; e = e->next) {
 		char *date = datestr(e->folder);
