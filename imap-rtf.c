@@ -62,8 +62,6 @@ static unsigned uidlist[MAX_UIDS];
 static int n_uids;
 static int did_delete;
 static int reread_config;
-static unsigned uidvalidity;
-static unsigned last_seen = 1;
 static unsigned cur_uid;
 
 static void logit(char action, const char *subject, unsigned cur_uid)
@@ -349,27 +347,6 @@ again:
 	}
 
 	return n_uids;
-}
-
-/* Called from send_recv() */
-void uid_validity(void)
-{
-	char *p = strstr(reply, "[UIDVALIDITY");
-	if (p) {
-		char *e;
-		unsigned valid = strtol(p + 12, &e, 10);
-		if (*e == ']') {
-			if (uidvalidity) {
-				if (uidvalidity != valid) {
-					logmsg("RESET: uidvalidity was %u now %u", uidvalidity, valid);
-					logit('C', "uidvalidity changed", time(NULL));
-					uidvalidity = valid;
-					last_seen = 1;
-				}
-			} else
-				uidvalidity = valid;
-		}
-	}
 }
 
 static int process_list(void)

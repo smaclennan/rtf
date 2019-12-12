@@ -10,6 +10,9 @@ static char *curline;
 static int cmdno;
 int is_exchange;
 
+unsigned uidvalidity;
+unsigned last_seen = 1;
+
 int send_cmd(const char *cmd)
 {
 	++cmdno;
@@ -19,6 +22,25 @@ int send_cmd(const char *cmd)
 		printf("C: %s", reply);
 
 	return ssl_write(reply, n);
+}
+
+static void uid_validity(void)
+{
+	char *p = strstr(reply, "[UIDVALIDITY");
+	if (p) {
+		char *e;
+		unsigned valid = strtol(p + 12, &e, 10);
+		if (*e == ']') {
+			if (uidvalidity) {
+				if (uidvalidity != valid) {
+					logmsg("RESET: uidvalidity was %u now %u", uidvalidity, valid);
+					uidvalidity = valid;
+					last_seen = 1;
+				}
+			} else
+				uidvalidity = valid;
+		}
+	}
 }
 
 int send_recv(const char *fmt, ...)

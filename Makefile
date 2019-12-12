@@ -20,7 +20,7 @@ endif
 
 VERSION=1.1
 
-all: $(BEARLIB) rtf imap-rtf learnem rtfsort regex-check clean-imap
+all: $(BEARLIB) rtf imap-rtf learnem rtfsort regex-check clean-imap fetch
 
 rtf: rtf.c
 	$(CC) $(CFLAGS) -o $@ $< $(LIBS)
@@ -28,6 +28,9 @@ rtf: rtf.c
 imap-rtf: imap-rtf.c bear.c bear-tools.c eyemap.c config.c
 	$(CC) $(CFLAGS) -DIMAP -o $@ $+ $(LIBS)
 	@etags $+
+
+fetch: fetch.c eyemap.c config.c bear.c bear-tools.c
+	$(CC) $(CFLAGS) -DIMAP -o $@ $+ $(LIBS)
 
 clean-imap: clean-imap.c eyemap.c bear.c bear-tools.c config.c
 	$(CC) $(CFLAGS) -DIMAP -o $@ $+ $(LIBS)
