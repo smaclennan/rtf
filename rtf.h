@@ -42,8 +42,8 @@
 #ifdef IMAP
 /* imap-rtf only */
 
-/* Largest buffer I have seen is 6,761 */
-#define BUFFER_SIZE (16 * 1024)
+/* Largest buffer I have seen is just over 46k */
+#define BUFFER_SIZE (64 * 1024)
 
 // config.c
 struct entry {
