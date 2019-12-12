@@ -48,8 +48,7 @@
 int just_checking;
 static const char *logfile;
 static int log_verbose;
-/* We only print the first 54 chars of subject */
-static char subject[55];
+static char subject[66];
 static char action = '?';
 static int dry_run;
 
@@ -85,12 +84,7 @@ static void logit(char action, const char *subject, unsigned cur_uid)
 		/* keep going even if we don't get the lock */
 	}
 
-#define OUT(a, c) ((flags & (a)) ? (c) : '-')
-	/* Last two flags are for learnem */
-	fprintf(fp, "%10u %c%c%c%c%c%c%c%c--%c %c %.54s\n", cur_uid,
-			'-', OUT(SAW_FROM, 'F'), OUT(SAW_DATE, 'D'),
-			OUT(IS_HAM, 'H'), OUT(IS_IGNORED, 'I'), OUT(IS_SPAM, 'S'),
-			'-', '-', '-', action, subject);
+	fprintf(fp, "%10u %c %.65s\n", cur_uid, action, subject);
 
 	if (ferror(fp))
 		syslog(LOG_ERR, "%s: write error", logfile);
