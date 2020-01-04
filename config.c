@@ -1,6 +1,7 @@
 #include "rtf.h"
 #include <limits.h>
 #include <dirent.h>
+#include <pwd.h>
 
 struct entry *global;
 struct entry *whitelist;
@@ -185,18 +186,26 @@ static int read_config_file(const char *fname)
 	return rc;
 }
 
+static void get_home(void)
+{	/* HOME env may not be available, or worse might be wrong */
+	struct passwd *ent = getpwuid(getuid());
+	if (ent) {
+		home = strdup(ent->pw_dir);
+		if (home)
+			return;
+	}
+
+	syslog(LOG_WARNING, "You do not exist!");
+	exit(1);
+}
+
 int read_config(void)
 {
 	char fname[128];
 	int rc;
 
-	if (!home) {
-		home = getenv("HOME");
-		if (!home) {
-			syslog(LOG_WARNING, "You are homeless!");
-			return 1;
-		}
-	}
+	if (!home)
+		get_home();
 
 	snprintf(fname, sizeof(fname), "%s/.rtf", home);
 	rc = read_config_file(fname);
