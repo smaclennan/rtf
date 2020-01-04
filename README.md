@@ -25,7 +25,7 @@ clean-imap is a companion program that is meant to run from cron
 (although you don't have to). It allows deleting old messages from
 folders.
 
-## BearSSL
+### BearSSL
 
 Currently the imap-rtf code requires BearSSL. If you have BearSSL
 built somewhere... you can point the Makefile at that directory.
@@ -36,7 +36,7 @@ following commands:
     git submodule init
     git submodule update
 
-### Certificate files
+#### Certificate files
 
 imap-rtf will run with 0 or more cert files. Every file in .rtf.d that
 starts with cert* will be added to the chain. You should have at least
