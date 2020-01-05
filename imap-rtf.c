@@ -66,6 +66,14 @@ static unsigned cur_uid;
 
 static void logit(char action, const char *subject, unsigned cur_uid)
 {
+	if (use_stderr) {
+		if (use_stderr < 2 && (action == 'h' || action == 'H'))
+			return;
+
+		fprintf(stderr, "%10u %c %.65s\n", cur_uid, action, subject);
+		return;
+	}
+
 	if (!logfile || dry_run)
 		return;
 	if (!log_verbose && (action == 'h' || action == 'H'))
@@ -488,9 +496,10 @@ static void usage(void)
 int main(int argc, char *argv[])
 {
 	int c, rc, do_daemon = 0;
-	while ((c = getopt(argc, argv, "dhl:nvC")) != EOF)
+	while ((c = getopt(argc, argv, "dehl:nvC")) != EOF)
 		switch (c) {
 		case 'd': do_daemon = 1; break;
+		case 'e': ++use_stderr; break;
 		case 'h': usage(); exit(0);
 		case 'L': log_verbose = 1; // fall thru
 		case 'l': logfile = optarg; break;
