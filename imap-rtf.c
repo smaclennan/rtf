@@ -81,19 +81,19 @@ static void logit(char action, const char *subject, unsigned cur_uid)
 
 	FILE *fp = fopen(logfile, "a");
 	if (!fp) {
-		syslog(LOG_ERR, "%s: %m", logfile);
+		logmsg(LOG_ERR, "%s: %m", logfile);
 		return;
 	}
 
 	if (flock(fileno(fp), LOCK_EX)) {
-		syslog(LOG_ERR, "%s: flock: %m", logfile);
+		logmsg(LOG_ERR, "%s: flock: %m", logfile);
 		/* keep going even if we don't get the lock */
 	}
 
 	fprintf(fp, "%10u %c %.65s\n", cur_uid, action, subject);
 
 	if (ferror(fp))
-		syslog(LOG_ERR, "%s: write error", logfile);
+		logmsg(LOG_ERR, "%s: write error", logfile);
 
 	fclose(fp);
 }
@@ -133,7 +133,7 @@ static inline int spam(void)
 	const char *bl = get_global("blacklist");
 	if (!bl) {
 		/* This can happen with no from and/or date */
-		logmsg("Spam and no blacklist in global section");
+		logmsg(LOG_WARNING, "Spam and no blacklist in global section");
 		return 0;
 	}
 	return safe_rename(bl);
@@ -263,7 +263,7 @@ static void read_last_seen(void)
 		if (verbose)
 			printf("Last seen %u\n", last_seen);
 	} else
-		logmsg("Unable to read .last-seen");
+		logmsg(LOG_WARNING, "Unable to read .last-seen");
 }
 
 static void write_last_seen(void)
@@ -540,7 +540,7 @@ int main(int argc, char *argv[])
 		if (do_daemon) {
 			// Only go daemon if connected
 			if (daemon(1, 0))
-				logmsg("daemon: %s", strerror(errno));
+				logmsg(LOG_ERR, "daemon: %s", strerror(errno));
 			do_daemon = 0;
 		}
 

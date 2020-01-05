@@ -21,7 +21,7 @@ static inline int write_string(char *str)
 	return write(2, str, strlen(str));
 }
 
-void logmsg(const char *fmt, ...)
+void logmsg(int type, const char *fmt, ...)
 {
 	va_list ap;
 	char msg[128];
@@ -33,7 +33,7 @@ void logmsg(const char *fmt, ...)
 	if (use_stderr)
 		write_string(msg);
 	else
-		syslog(LOG_INFO, "%s", msg);
+		syslog(type, "%s", msg);
 }
 
 const char *get_global(const char *glob)
@@ -73,7 +73,7 @@ static int add_entry(struct entry **head, char *str)
 		if (p)
 			*p++ = 0;
 		else {
-			logmsg("Bad line '%s'", str);
+			logmsg(LOG_INFO, "Bad line '%s'", str);
 			return 1;
 		}
 	}
@@ -110,7 +110,7 @@ static int add_entry(struct entry **head, char *str)
 	return 0;
 
 oom:
-	syslog(LOG_ERR, "Out of memory.");
+	logmsg(LOG_ERR, "Out of memory.");
 	exit(1);
 }
 
@@ -148,7 +148,7 @@ static int read_config_file(const char *fname)
 			return 0;
 
 		perror(fname);
-		syslog(LOG_WARNING, "%s: %m", fname);
+		logmsg(LOG_WARNING, "%s: %m", fname);
 		return 1;
 	}
 
@@ -174,7 +174,7 @@ static int read_config_file(const char *fname)
 			else if (strcmp(line, "[clean]") == 0)
 				head = &cleanlist;
 			else {
-				syslog(LOG_INFO, "Unexpected: %s\n", line);
+				logmsg(LOG_INFO, "Unexpected: %s\n", line);
 				head = NULL;
 			}
 		} else if (head)
@@ -195,7 +195,7 @@ static void get_home(void)
 			return;
 	}
 
-	syslog(LOG_WARNING, "You do not exist!");
+	logmsg(LOG_ERR, "You do not exist!");
 	exit(1);
 }
 
@@ -236,16 +236,16 @@ int read_config(void)
 		get_global_num("port") == 0 ||
 		!get_global("user") ||
 		!get_global("passwd")) {
-		logmsg("Missing required global(s)");
+		logmsg(LOG_ERR, "Missing required global(s)");
 		rc = 1;
 	}
 
 	if (graylist && !get_global("graylist")) {
-		logmsg("graylist global missing");
+		logmsg(LOG_ERR, "graylist global missing");
 		rc = 1;
 	}
 	if (blacklist && !get_global("blacklist")) {
-		logmsg("blacklist global missing");
+		logmsg(LOG_ERR, "blacklist global missing");
 		rc = 1;
 	}
 

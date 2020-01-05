@@ -50,7 +50,7 @@ static char *datestr(const char *days)
 		char *e;
 		n_days = strtoul(days, &e, 10);
 		if (n_days == 0 || *e) {
-			logmsg("Bad datestr %s", days);
+			logmsg(LOG_ERR, "Bad datestr %s", days);
 			return NULL;
 		}
 	}

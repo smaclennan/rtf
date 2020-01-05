@@ -60,7 +60,7 @@ int ssl_open(int sock, const char *host)
 	br_ssl_client_init_full(&sc, &mc, &VEC_ELT(anchors, 0), VEC_LEN(anchors));
 
 	if (VEC_LEN(anchors) == 0) {
-		logmsg("Warning: No cert");
+		logmsg(LOG_WARNING, "Warning: No cert");
 		x509_noanchor_init(&xwc, &mc.vtable);
 		br_ssl_engine_set_x509(&sc.eng, &xwc.vtable);
 	}
@@ -111,7 +111,7 @@ void ssl_close(void)
 	if (br_ssl_engine_current_state(&sc.eng) == BR_SSL_CLOSED) {
 		int err = br_ssl_engine_last_error(&sc.eng);
 		if (err)
-			logmsg("SSL error %d", err);
+			logmsg(LOG_ERR, "SSL error %d", err);
 	}
 	sock_fd = -1;
 }

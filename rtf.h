@@ -69,7 +69,7 @@ extern unsigned last_seen;
 const char *get_global(const char *glob);
 int get_global_num(const char *glob);
 int read_config(void);
-void logmsg(const char *fmt, ...);
+void logmsg(int type, const char *fmt, ...);
 
 // bear.c
 int ssl_open(int sock, const char *host);

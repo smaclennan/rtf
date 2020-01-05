@@ -33,7 +33,7 @@ static void uid_validity(void)
 		if (*e == ']') {
 			if (uidvalidity) {
 				if (uidvalidity != valid) {
-					logmsg("RESET: uidvalidity was %u now %u", uidvalidity, valid);
+					logmsg(LOG_INFO, "RESET: uidvalidity was %u now %u", uidvalidity, valid);
 					uidvalidity = valid;
 					last_seen = 1;
 				}
@@ -152,13 +152,13 @@ int connect_to_server(const char *server, int port,
 	if (host)
 		host_ip = *(uint32_t *)host->h_addr_list[0];
 	else
-		logmsg("Unable to get host %s", server);
+		logmsg(LOG_INFO, "Unable to get host %s", server);
 	if (host_ip == 0)
 		return -1;
 
 	int sock = socket(AF_INET, SOCK_STREAM, 0);
 	if (sock == -1) {
-		logmsg("socket: %s", strerror(errno));
+		logmsg(LOG_ERR, "socket: %s", strerror(errno));
 		goto failed;
 	}
 
@@ -172,29 +172,29 @@ int connect_to_server(const char *server, int port,
 	sock_name.sin_port = htons(port);
 
 	if (connect(sock, (struct sockaddr *)&sock_name, sizeof(sock_name))) {
-		logmsg("connect: %s", strerror(errno));
+		logmsg(LOG_ERR, "connect: %s", strerror(errno));
 		goto failed;
 	}
 
 	if (ssl_open(sock, server)) {
-		logmsg("ssl_open failed");
+		logmsg(LOG_ERR, "ssl_open failed");
 		goto failed;
 	}
 
 	if (send_recv(NULL)) {
-		logmsg("Did not get server OK");
+		logmsg(LOG_ERR, "Did not get server OK");
 		goto failed;
 	}
 
 	is_exchange = strstr(reply, "Microsoft Exchange") != NULL;
 
 	if (send_recv("LOGIN %s %s", user, passwd)) {
-		logmsg("Login failed");
+		logmsg(LOG_ERR, "Login failed");
 		goto failed;
 	}
 
 	if (send_recv("SELECT INBOX")) {
-		logmsg("Select failed");
+		logmsg(LOG_ERR, "Select failed");
 		goto failed;
 	}
 
