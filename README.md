@@ -42,8 +42,9 @@ imap-rtf will run with 0 or more cert files. Every file in .rtf.d that
 starts with cert* will be added to the chain. You should have at least
 two: one from the server and the trusted root.
 
-On Slackware, the trusted certs are in /etc/ssl/certs. I linked the
-needed cert into ~/.rtf.d as cert-root. A good way to test the certs
-is with brssl provided by BearSSL. In my case:
+On Slackware, Ubuntu, and probably most others, the trusted certs are
+in /etc/ssl/certs. I linked the needed cert into ~/.rtf.d as
+cert-root. A good way to test the certs is with brssl provided by
+BearSSL. In my case:
 
     brssl verify -CA ~/.rtf.d/cert-root ~/.rtf.d/cert
