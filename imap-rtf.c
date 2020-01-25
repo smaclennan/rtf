@@ -448,19 +448,13 @@ static void run(void)
 			return;
 		}
 
-		while (1) {
-			n = ssl_timed_read(buff, sizeof(buff) - 1, timeout);
-			if (n == 0)
-				break;
-			if (n < 0)
-				return;
+		n = ssl_timed_read(buff, sizeof(buff) - 1, timeout);
+		if (n < 0)
+			return;
+
+		if (n > 0 && verbose) {
 			buff[n] = 0;
-
-			if (verbose)
-				printf("S: %s", buff);
-
-			if (strstr(buff, "RECENT"))
-				break;
+			printf("S: %s", buff);
 		}
 
 		if (ssl_write("DONE\r\n", 6) <= 0)
