@@ -1,12 +1,15 @@
 #include "rtf.h"
 #include <stdint.h>
 
-struct dst_block {
+/* Since the reply buffer is BUFFER_SIZE, this is the maximum size for
+ * the base64 decoded buffer.
+ */
+static char decode_buffer[(BUFFER_SIZE + 3) / 4 * 3];
+
+static struct dst_block {
 	char *base;
 	char *cur;
-	int curlen;
-	int maxlen;
-};
+} dst;
 
 static int local_tz_offset = -1;
 
@@ -86,9 +89,6 @@ static int process_vcal(struct dst_block *dst)
 	char dtstart[32] = "";
 	char location[64] = "";
 	char uid[256] = "";
-
-	if (dst->base == NULL)
-		return -1;
 
 	// Limit to the vevent or we might get a false DTSTART
 	dst->cur = strstr(dst->base, "BEGIN:VEVENT");
@@ -246,19 +246,6 @@ static int base64_decode(struct dst_block *dst, char *src)
 {
 	int len = strlen(src);
 
-	// I have received vcalendar requests at work of 77k
-	// Minimum is about 2k
-	if (dst->curlen + len > dst->maxlen) {
-		dst->maxlen += 4096;
-		char *new = realloc(dst->base, dst->maxlen);
-		if (!new) {
-			logmsg(LOG_ERR, "out of memory");
-			return ENOMEM;
-		}
-		dst->base = new;
-		dst->cur  = new + dst->curlen;
-	}
-
 	while (len >= 4) {
 		int n = decode_block(dst->cur, src);
 		if (n == -1) {
@@ -267,7 +254,6 @@ static int base64_decode(struct dst_block *dst, char *src)
 			return EINVAL; /* invalid input */
 		}
 		dst->cur += n;
-		dst->curlen += n;
 		src += 4;
 		len -= 4;
 	}
@@ -277,8 +263,6 @@ static int base64_decode(struct dst_block *dst, char *src)
 
 void process_diary(unsigned int uid, int base64)
 {
-	struct dst_block dst = { 0 };
-
 	calc_local_timezone_offset();
 
 	int rc = send_recv("UID FETCH %u (BODY.PEEK[TEXT])", uid);
@@ -288,18 +272,13 @@ void process_diary(unsigned int uid, int base64)
 	}
 
 	if (base64) {
-		if (base64_decode(&dst, reply)) {
-			free(dst.base);
+		dst.base = decode_buffer;
+		dst.cur = dst.base;
+		if (base64_decode(&dst, reply))
 			return;
-		}
-	} else {
+	} else
 		dst.base = reply;
-		dst.curlen = strlen(reply);
-	}
 
 	if (process_vcal(&dst))
 		logmsg(LOG_ERR, "Unable to parse vcal for %u", uid);
-
-	if (base64)
-		free(dst.base);
 }
