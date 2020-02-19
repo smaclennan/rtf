@@ -2,7 +2,7 @@
 #include <stdint.h>
 
 /* Since the reply buffer is BUFFER_SIZE, this is the maximum size for
- * the base64 decoded buffer.
+ * the base64 buffer after decoding.
  */
 static char decode_buffer[(BUFFER_SIZE + 3) / 4 * 3];
 
