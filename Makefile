@@ -25,7 +25,7 @@ all: $(BEARLIB) rtf imap-rtf learnem rtfsort regex-check clean-imap fetch
 rtf: rtf.c
 	$(CC) $(CFLAGS) -o $@ $< $(LIBS)
 
-imap-rtf: imap-rtf.c bear.c bear-tools.c eyemap.c config.c
+imap-rtf: imap-rtf.c bear.c bear-tools.c eyemap.c config.c diary.c
 	$(CC) $(CFLAGS) -DIMAP -o $@ $+ $(LIBS)
 	@etags $+
 

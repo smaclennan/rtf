@@ -13,6 +13,7 @@ struct entry *cleanlist;
 char *home;
 int verbose;
 int use_stderr;
+const char *diary;
 static int generation;
 
 static inline int write_string(char *str)
@@ -103,6 +104,7 @@ static int add_entry(struct entry **head, char *str)
 
 	new->generation = generation;
 	if (tail) {
+		new->prev = tail;
 		tail->next = new;
 		tail = new;
 	} else
@@ -114,27 +116,39 @@ oom:
 	exit(1);
 }
 
+static int check_entry(struct entry **head, struct entry *e)
+{
+	if (e->generation != generation) {
+		if (e->prev)
+			e->prev->next = e->next;
+		else
+			*head = e->next;
+		free((char *)e->str);
+		free((char *)e->folder);
+		free(e);
+		return 0;
+	}
+
+	return 1;
+}
+
 static void check_list(struct entry **head)
 {
-	struct entry *prev = NULL;
 	struct entry *e = *head;
 
 	while (e) {
 		struct entry *next = e->next;
-
-		if (e->generation != generation) {
-			if (prev)
-				prev->next = next;
-			else
-				*head = next;
-			free((char *)e->str);
-			free((char *)e->folder);
-			free(e);
-		} else
-			prev = e;
-
+		check_entry(head, e);
 		e = next;
 	}
+}
+
+static struct entry *check_global(const char *glob)
+{
+	for (struct entry *e = global; e; e = e->next)
+		if (strcmp(e->str, glob) == 0)
+			return check_entry(&global, e) ? e : NULL;
+	return NULL;
 }
 
 static int read_config_file(const char *fname)
@@ -226,7 +240,11 @@ int read_config(void)
 		closedir(dir);
 	}
 
-	// Do not delete working globals
+	// Do not delete working globals except diary
+	struct entry *e = check_global("diary");
+	if (e)
+		diary = e->folder;
+
 	check_list(&whitelist);
 	check_list(&graylist);
 	check_list(&blacklist);

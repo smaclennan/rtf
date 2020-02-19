@@ -50,7 +50,7 @@ struct entry {
 	const char *str;
 	const char *folder;
 	int generation;
-	struct entry *next;
+	struct entry *prev, *next;
 };
 
 extern struct entry *global;
@@ -61,6 +61,7 @@ extern struct entry *folderlist;
 extern struct entry *cleanlist;
 
 extern char *home;
+extern const char *diary;
 extern int verbose;
 extern int use_stderr;
 extern unsigned uidvalidity;
@@ -90,6 +91,9 @@ int send_cmd(const char *cmd);
 int fetch(unsigned uid);
 int fetchline(char *buf, int len);
 int check_folders(void);
+
+// diary.c
+void process_diary(unsigned int uid, int base64);
 #endif
 
 #endif
