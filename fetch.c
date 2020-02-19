@@ -46,15 +46,18 @@
 
 int main(int argc, char *argv[])
 {
-	int c;
-	while ((c = getopt(argc, argv, "v")) != EOF)
-		if (c == 'v')
-			++verbose;
+	int c, rc, text = 0;
+	while ((c = getopt(argc, argv, "tv")) != EOF)
+		switch (c) {
+		case 't': text = 1; break;
+		case 'v': ++verbose; break;
+		}
 
 	if (argc == optind) {
 		puts("I need a uid");
 		exit(1);
 	}
+	unsigned int uid = strtol(argv[optind], NULL, 0);
 
 	if (read_config())
 		exit(1);
@@ -64,8 +67,10 @@ int main(int argc, char *argv[])
 								 get_global("user"),
 								 get_global("passwd"));
 
-
-	int rc = fetch(strtol(argv[optind], NULL, 0));
+	if (text)
+		rc = send_recv("UID FETCH %u (BODY.PEEK[TEXT])", uid);
+	else
+		rc = fetch(uid);
 
 	ssl_close();
 	close(sock);

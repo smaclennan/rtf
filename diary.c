@@ -1,6 +1,6 @@
 #include "rtf.h"
+#include <stdint.h>
 
-#if 0
 struct dst_block {
 	char *base;
 	char *cur;
@@ -8,7 +8,7 @@ struct dst_block {
 	int maxlen;
 };
 
-static int local_tz_offset;
+static int local_tz_offset = -1;
 
 static void write_str(int fd, const char *str)
 {
@@ -23,7 +23,7 @@ static int open_diary(void)
 {
 	int fd = open(diary, O_WRONLY | O_APPEND | O_CREAT, 0644);
 	if (fd < 0) {
-		logit("unable to open diary %s", diary);
+		logmsg(LOG_ERR, "unable to open diary %s", diary);
 		return -1;
 	}
 
@@ -32,7 +32,7 @@ static int open_diary(void)
 		n = flock(fd, LOCK_EX);
 	while (n < 0 && errno == EINTR);
 	if (n < 0) {
-		logit("flock %s", strerror(errno));
+		logmsg(LOG_ERR, "flock %s", strerror(errno));
 		close(fd);
 		return -1;
 	}
@@ -51,8 +51,7 @@ static void close_diary(int fd)
 
 static void write_diary(const char *dtstart,
 						const char *summary,
-						const char *location,
-						const char *uid)
+						const char *location)
 {
 	int fd = open_diary();
 	if (fd < 0)
@@ -60,8 +59,6 @@ static void write_diary(const char *dtstart,
 
 	char buf[1024];
 	int n = snprintf(buf, sizeof(buf), "\n%s %s\n", dtstart, summary);
-	if (uid && *uid)
-		n += snprintf(buf + n, sizeof(buf) - n, "\t%s\n", uid);
 	if (location && *location)
 		n += snprintf(buf + n, sizeof(buf) - n, "\t%s\n", location);
 
@@ -162,7 +159,7 @@ static int process_vcal(struct dst_block *dst)
 
 	uint64_t date, time;
 	if (sscanf(e + 1, "%ldT%ld", &date, &time) != 2) {
-		logit("bad date %s", p);
+		logmsg(LOG_WARNING, "bad date %s", p);
 		return -1;
 	}
 
@@ -182,13 +179,17 @@ static int process_vcal(struct dst_block *dst)
 			strtok(location, "\r\n");
 		}
 
-	write_diary(dtstart, summary, location, hash);
+	write_diary(dtstart, summary, location);
 
 	return 0;
 }
 
 static void calc_local_timezone_offset(void)
-{	// calc local timezone offset
+{
+	if (local_tz_offset != -1)
+		return;
+
+	// calc local timezone offset
 	// we always use standard time
 	time_t now = time(NULL);
 	struct tm *tm = gmtime(&now);
@@ -196,8 +197,109 @@ static void calc_local_timezone_offset(void)
 	tm = localtime(&now);
 	local_tz_offset = tm->tm_hour - gmt - tm->tm_isdst;
 }
-#endif
+
+static const uint8_t reverse[] = {
+	0xff, 0xff, 0xff, 0xff, 0xff, 0xff, 0xff, 0xff,
+	0xff, 0xff, 0xff, 0xff, 0xff, 0xff, 0xff, 0xff,
+	0xff, 0xff, 0xff, 0xff, 0xff, 0xff, 0xff, 0xff,
+	0xff, 0xff, 0xff, 0xff, 0xff, 0xff, 0xff, 0xff,
+	0xff, 0xff, 0xff, 0xff, 0xff, 0xff, 0xff, 0xff,
+	0xff, 0xff, 0xff, 0x3e, 0xff, 0x3e, 0xff, 0x3f,
+	0x34, 0x35, 0x36, 0x37, 0x38, 0x39, 0x3a, 0x3b,
+	0x3c, 0x3d, 0xff, 0xff, 0xff, 0xff, 0xff, 0xff,
+	0xff, 0x00, 0x01, 0x02, 0x03, 0x04, 0x05, 0x06,
+	0x07, 0x08, 0x09, 0x0a, 0x0b, 0x0c, 0x0d, 0x0e,
+	0x0f, 0x10, 0x11, 0x12, 0x13, 0x14, 0x15, 0x16,
+	0x17, 0x18, 0x19, 0xff, 0xff, 0xff, 0xff, 0x3f,
+	0xff, 0x1a, 0x1b, 0x1c, 0x1d, 0x1e, 0x1f, 0x20,
+	0x21, 0x22, 0x23, 0x24, 0x25, 0x26, 0x27, 0x28,
+	0x29, 0x2a, 0x2b, 0x2c, 0x2d, 0x2e, 0x2f, 0x30,
+	0x31, 0x32, 0x33, 0xff, 0xff, 0xff, 0xff, 0xff,
+};
+
+/* decode 4 bytes into 3
+ * < 6 > < 2 | 4 > < 4 | 2 > < 6 >
+ */
+static int decode_block(char *dst, const char *src)
+{
+	uint8_t block[4];
+	int i;
+
+	for (i = 0; i < 4; ++i, ++src) {
+		if (*src == '=')
+			break;
+		block[i] = reverse[*src & 0x7f];
+		if (block[i] == 0xff)
+			return -1;
+	}
+
+	if (i > 1)
+		*dst++ = ((block[0] << 2) & 0xfc) | ((block[1] >> 4) & 3);
+	if (i > 2)
+		*dst++ = ((block[1] << 4) & 0xf0) | ((block[2] >> 2) & 0xf);
+	if (i > 3)
+		*dst++ = ((block[2] << 6) & 0xc0) | (block[3] & 0x3f);
+	return i - 1;
+}
+
+static int base64_decode(struct dst_block *dst, char *src)
+{
+	int len = strlen(src);
+
+	// I have received vcalendar requests at work of 77k
+	// Minimum is about 2k
+	if (dst->curlen + len > dst->maxlen) {
+		dst->maxlen += 4096;
+		char *new = realloc(dst->base, dst->maxlen);
+		if (!new) {
+			logmsg(LOG_ERR, "out of memory");
+			return ENOMEM;
+		}
+		dst->base = new;
+		dst->cur  = new + dst->curlen;
+	}
+
+	while (len >= 4) {
+		int n = decode_block(dst->cur, src);
+		if (n == -1) {
+			*dst->cur = 0;
+			logmsg(LOG_ERR, "base64 decode error");
+			return EINVAL; /* invalid input */
+		}
+		dst->cur += n;
+		dst->curlen += n;
+		src += 4;
+		len -= 4;
+	}
+	*dst->cur = 0;
+	return 0;
+}
 
 void process_diary(unsigned int uid, int base64)
 {
+	struct dst_block dst = { 0 };
+
+	calc_local_timezone_offset();
+
+	int rc = send_recv("UID FETCH %u (BODY.PEEK[TEXT])", uid);
+	if (rc) {
+		logmsg(LOG_ERR, "Unable to fetch body for %u", uid);
+		return;
+	}
+
+	if (base64) {
+		if (base64_decode(&dst, reply)) {
+			free(dst.base);
+			return;
+		}
+	} else {
+		dst.base = reply;
+		dst.curlen = strlen(reply);
+	}
+
+	if (process_vcal(&dst))
+		logmsg(LOG_ERR, "Unable to parse vcal for %u", uid);
+
+	if (base64)
+		free(dst.base);
 }
