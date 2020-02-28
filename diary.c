@@ -261,24 +261,28 @@ static int base64_decode(struct dst_block *dst, char *src)
 	return 0;
 }
 
-void process_diary(unsigned int uid, int base64)
+int process_diary(unsigned int uid, int base64)
 {
 	calc_local_timezone_offset();
 
 	int rc = send_recv("UID FETCH %u (BODY.PEEK[TEXT])", uid);
 	if (rc) {
 		logmsg(LOG_ERR, "Unable to fetch body for %u", uid);
-		return;
+		return 0;
 	}
 
 	if (base64) {
 		dst.base = decode_buffer;
 		dst.cur = dst.base;
 		if (base64_decode(&dst, reply))
-			return;
+			return 0;
 	} else
 		dst.base = reply;
 
-	if (process_vcal(&dst))
+	if (process_vcal(&dst)) {
 		logmsg(LOG_ERR, "Unable to parse vcal for %u", uid);
+		return 0;
+	}
+
+	return 1; // success
 }

@@ -228,7 +228,8 @@ static int filter(void)
 	}
 
 	if (diary_state && diary)
-		process_diary(cur_uid, diary_state & 1);
+		if (process_diary(cur_uid, diary_state & 1))
+			logit('D', subject, cur_uid);
 
 	if (flags & IS_IGNORED) {
 		action = 'I';
