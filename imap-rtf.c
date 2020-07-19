@@ -41,6 +41,7 @@
  */
 
 #include "rtf.h"
+#include <pwd.h>
 #include <sys/signal.h>
 
 #define RFC2177_TIMEOUT (29 * 60 * 1000) // 29 minutes in ms
@@ -483,10 +484,30 @@ static void run(void)
 #endif
 }
 
+static void set_user(const char *user)
+{
+	struct passwd *pw = getpwnam(user);
+	if (!pw) {
+		perror(user);
+		exit(1);
+	}
+
+	if (chdir(pw->pw_dir)) {
+		fprintf(stderr, "chdir(%s): %s\n", pw->pw_dir, strerror(errno));
+		exit(1);
+	}
+
+	if (setgid(pw->pw_gid) || setuid(pw->pw_uid)) {
+		fprintf(stderr, "Unable switch to %s\n", user);
+		exit(1);
+	}
+}
+
 static void usage(void)
 {
-	puts("usage:\trtf [-dhnvC] [-{lL} logfile]\n"
+	puts("usage:\trtf [-dehnvC] [-{lL} logfile] [-u user]\n"
 		 "where:\t-d   daemonize\n"
+		 "\t-e   use stderr\n"
 		 "\t-h   this help\n"
 		 "\t-n   dry run\n"
 		 "\t-v   more verbose\n"
@@ -498,7 +519,7 @@ static void usage(void)
 int main(int argc, char *argv[])
 {
 	int c, rc, do_daemon = 0;
-	while ((c = getopt(argc, argv, "dehl:nvC")) != EOF)
+	while ((c = getopt(argc, argv, "dehl:nu:vC")) != EOF)
 		switch (c) {
 		case 'd': do_daemon = 1; break;
 		case 'e': ++use_stderr; break;
@@ -506,6 +527,7 @@ int main(int argc, char *argv[])
 		case 'L': log_verbose = 1; // fall thru
 		case 'l': logfile = optarg; break;
 		case 'n': dry_run = 1; break;
+		case 'u': set_user(optarg); break;
 		case 'v': ++verbose; break;
 		case 'C': just_checking = 1; use_stderr = 1; break;
 		}
