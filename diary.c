@@ -261,23 +261,54 @@ static int base64_decode(struct dst_block *dst, char *src)
 	return 0;
 }
 
-int process_diary(unsigned int uid, int base64)
+int find_diary(unsigned int uid)
 {
-	calc_local_timezone_offset();
-
 	int rc = send_recv("UID FETCH %u (BODY.PEEK[TEXT])", uid);
 	if (rc) {
 		logmsg(LOG_ERR, "Unable to fetch body for %u", uid);
 		return 0;
 	}
 
-	if (base64) {
-		dst.base = decode_buffer;
-		dst.cur = dst.base;
-		if (base64_decode(&dst, reply))
+	char *p = strstr(reply, "Content-Type: text/calendar");
+	if (!p)
+		return 0;
+
+	p = strchr(p, '\n');
+	if (!p) {
+		logmsg(LOG_ERR, "Bad calendar line for %u", uid);
+		return 0;
+	}
+
+	++p;
+	if (strncmp(p, "Content-Transfer-Encoding: base64", 33) == 0) {
+		p = strchr(p, '\n');
+		if (!p) {
+			logmsg(LOG_ERR, "Bad encoding line for %u", uid);
 			return 0;
+		}
+		++p;
+		if (*p == '\n') ++p; // skip empty line
+
+		char *end = strstr(p, "\n\n");
+		if (end) *(end + 1) = 0;
+
+		dst.base = decode_buffer;
+		if (base64_decode(&dst, p)) {
+			logmsg(LOG_ERR, "Base64 decode failed for %u", uid);
+			return 0;
+		}
 	} else
-		dst.base = reply;
+		// Untested - all the vcal emails I get are base64
+		dst.base = p;
+
+
+	dst.cur = dst.base;
+	return 1;
+}
+
+int process_diary(unsigned int uid)
+{
+	calc_local_timezone_offset();
 
 	if (process_vcal(&dst)) {
 		logmsg(LOG_ERR, "Unable to parse vcal for %u", uid);

@@ -189,7 +189,6 @@ static void normalize_subject(const char *str)
 static int filter(void)
 {
 	const struct entry *e;
-	int diary_state = 0;
 
 	strcpy(subject, "NONE");
 	action = '?';
@@ -222,15 +221,13 @@ static int filter(void)
 				folder_match = e->folder;
 		} else if (strncasecmp(buff, "Return-Path:", 12) == 0) {
 			filter_from(buff);
-		} else if (strncasecmp(buff, "Content-Type: text/calendar;", 28) == 0)
-			diary_state |= 2;
-		else if (strncasecmp(buff, "Content-Transfer-Encoding: base64", 33) == 0)
-			diary_state |= 1;
+		}
 	}
 
-	if (diary_state && diary)
-		if (process_diary(cur_uid, diary_state & 1))
-			logit('D', subject, cur_uid);
+	if (diary)
+		if (find_diary(cur_uid))
+			if (process_diary(cur_uid))
+				logit('D', subject, cur_uid);
 
 	if (flags & IS_IGNORED) {
 		action = 'I';

@@ -95,7 +95,8 @@ int fetchline(char *buf, int len);
 int check_folders(void);
 
 // diary.c
-int process_diary(unsigned int uid, int base64);
+int find_diary(unsigned int uid);
+int process_diary(unsigned int uid);
 #endif
 
 #endif
