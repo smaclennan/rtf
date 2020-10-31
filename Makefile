@@ -3,6 +3,8 @@
 D = -O2
 CFLAGS += -Wall $(D:1=-g)
 
+CFLAGS += -Wno-format-truncation
+
 WANT_FORWARDING=0
 WANT_BEARSSL=1
 
