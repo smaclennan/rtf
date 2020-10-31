@@ -284,8 +284,9 @@ static struct black *add_blacklist(char *str)
 {
 	struct black *bl = calloc(1, sizeof(struct black));
 	assert(bl);
-	assert(bl->str = strdup(str));
-	assert(bl->match = strdup(str));
+	bl->str = strdup(str);
+	bl->match = strdup(str);
+	assert(bl->str && bl->match);
 
 	char *p;
 	for (p = bl->match; *p; ++p)

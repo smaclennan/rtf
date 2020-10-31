@@ -244,18 +244,24 @@ static int decode_block(char *dst, const char *src)
 
 static int base64_decode(struct dst_block *dst, char *src)
 {
-	int len = strlen(src);
+	char *line;
 
-	while (len >= 4) {
-		int n = decode_block(dst->cur, src);
-		if (n == -1) {
+	while ((line = strtok(src, "\r\n"))) {
+		int len = strlen(line);
+		if (len & 3)
+			return -1; // bad line
+		while (len >= 4) {
+			int n = decode_block(dst->cur, line);
+			if (n == -1) {
 			*dst->cur = 0;
-			logmsg(LOG_ERR, "base64 decode error");
-			return EINVAL; /* invalid input */
+				logmsg(LOG_ERR, "base64 decode error");
+				return EINVAL; /* invalid input */
+			}
+			dst->cur += n;
+			line += 4;
+			len -= 4;
 		}
-		dst->cur += n;
-		src += 4;
-		len -= 4;
+		src = NULL;
 	}
 	*dst->cur = 0;
 	return 0;
@@ -280,29 +286,31 @@ int find_diary(unsigned int uid)
 	}
 
 	++p;
-	if (strncmp(p, "Content-Transfer-Encoding: base64", 33) == 0) {
-		p = strchr(p, '\n');
-		if (!p) {
-			logmsg(LOG_ERR, "Bad encoding line for %u", uid);
-			return 0;
-		}
-		++p;
-		if (*p == '\n') ++p; // skip empty line
-
-		char *end = strstr(p, "\n\n");
-		if (end) *(end + 1) = 0;
-
-		dst.base = decode_buffer;
-		if (base64_decode(&dst, p)) {
-			logmsg(LOG_ERR, "Base64 decode failed for %u", uid);
-			return 0;
-		}
-	} else
+	if (strncmp(p, "Content-Transfer-Encoding: base64", 33)) {
 		// Untested - all the vcal emails I get are base64
 		dst.base = p;
+		return 1;
+	}
 
+	p = strchr(p, '\n');
+	if (!p) {
+		logmsg(LOG_ERR, "Bad encoding line for %u", uid);
+		return 0;
+	}
+	++p;
+	if (*p == '\r') ++p; // skip empty line
+	if (*p == '\n') ++p; // skip empty line
 
+	char *end = strstr(p, "\n\r\n");
+	if (end) *(end + 1) = 0;
+
+	dst.base = decode_buffer;
 	dst.cur = dst.base;
+	if (base64_decode(&dst, p)) {
+		logmsg(LOG_ERR, "Base64 decode failed for %u", uid);
+		return 0;
+	}
+
 	return 1;
 }
 
