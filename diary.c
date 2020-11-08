@@ -13,6 +13,7 @@ static struct dst_block {
 
 static int local_tz_offset = -1;
 
+#ifndef STANDALONE
 static void write_str(int fd, const char *str)
 {
 	int n;
@@ -69,6 +70,16 @@ static void write_diary(const char *dtstart,
 
 	close_diary(fd);
 }
+#else
+static void write_diary(const char *dtstart,
+						const char *summary,
+						const char *location)
+{
+	printf("%s %s\n", dtstart, summary);
+	if (location && *location)
+		printf("\t%s\n", location);
+}
+#endif
 
 static int tz_offset(char *base)
 {
@@ -344,7 +355,6 @@ int find_diary(unsigned int uid)
 	return process_diary(uid);
 }
 #else
-const char *diary = "/tmp/diary";
 char reply[BUFFER_SIZE];
 
 void logmsg(int type, const char *fmt, ...)
