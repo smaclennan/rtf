@@ -366,20 +366,10 @@ void logmsg(int type, const char *fmt, ...)
 	putchar('\n');
 }
 
+/* diary < diary_file */
 int main(int argc, char *argv[])
 {
-	if (argc == 1) {
-		puts("I need a file name\n");
-		exit(1);
-	}
-
-	int fd = open(argv[1], O_RDONLY);
-	if (fd == -1) {
-		perror(argv[1]);
-		exit(1);
-	}
-	size_t n = read(fd, reply, sizeof(reply) - 1);
-	close(fd);
+	size_t n = read(0, reply, sizeof(reply) - 1);
 	if (n <= 0) {
 		perror("read");
 		exit(1);
