@@ -226,8 +226,7 @@ static int filter(void)
 
 	if (diary)
 		if (find_diary(cur_uid))
-			if (process_diary(cur_uid))
-				logit('D', subject, cur_uid);
+			logit('D', subject, cur_uid);
 
 	if (flags & IS_IGNORED) {
 		action = 'I';

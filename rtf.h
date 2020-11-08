@@ -96,7 +96,6 @@ int check_folders(void);
 
 // diary.c
 int find_diary(unsigned int uid);
-int process_diary(unsigned int uid);
 #endif
 
 #endif

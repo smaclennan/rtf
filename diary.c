@@ -253,7 +253,7 @@ static int base64_decode(struct dst_block *dst, char *src)
 		while (len >= 4) {
 			int n = decode_block(dst->cur, line);
 			if (n == -1) {
-			*dst->cur = 0;
+				*dst->cur = 0;
 				logmsg(LOG_ERR, "base64 decode error");
 				return EINVAL; /* invalid input */
 			}
@@ -267,14 +267,8 @@ static int base64_decode(struct dst_block *dst, char *src)
 	return 0;
 }
 
-int find_diary(unsigned int uid)
+static int look_for_vcal(unsigned int uid)
 {
-	int rc = send_recv("UID FETCH %u (BODY.PEEK[TEXT])", uid);
-	if (rc) {
-		logmsg(LOG_ERR, "Unable to fetch body for %u", uid);
-		return 0;
-	}
-
 	char *p = strstr(reply, "Content-Type: text/calendar");
 	if (!p)
 		return 0;
@@ -298,10 +292,18 @@ int find_diary(unsigned int uid)
 		return 0;
 	}
 	++p;
-	if (*p == '\r') ++p; // skip empty line
+	int sawcr = 0;
+	if (*p == '\r') {
+		sawcr = 1;
+		++p; // skip empty line
+	}
 	if (*p == '\n') ++p; // skip empty line
 
-	char *end = strstr(p, "\n\r\n");
+	char *end;
+	if (sawcr)
+		end = strstr(p, "\n\r\n");
+	else
+		end = strstr(p, "\n\n");
 	if (end) *(end + 1) = 0;
 
 	dst.base = decode_buffer;
@@ -314,8 +316,11 @@ int find_diary(unsigned int uid)
 	return 1;
 }
 
-int process_diary(unsigned int uid)
+static int process_diary(unsigned int uid)
 {
+	if (!look_for_vcal(uid))
+		return 0;
+
 	calc_local_timezone_offset();
 
 	if (process_vcal(&dst)) {
@@ -325,3 +330,58 @@ int process_diary(unsigned int uid)
 
 	return 1; // success
 }
+
+
+#ifndef STANDALONE
+int find_diary(unsigned int uid)
+{
+	int rc = send_recv("UID FETCH %u (BODY.PEEK[TEXT])", uid);
+	if (rc) {
+		logmsg(LOG_ERR, "Unable to fetch body for %u", uid);
+		return 0;
+	}
+
+	return process_diary(uid);
+}
+#else
+const char *diary = "/tmp/diary";
+char reply[BUFFER_SIZE];
+
+void logmsg(int type, const char *fmt, ...)
+{
+	va_list ap;
+	va_start(ap, fmt);
+	vprintf(fmt, ap);
+	va_end(ap);
+	putchar('\n');
+}
+
+int main(int argc, char *argv[])
+{
+	if (argc == 1) {
+		puts("I need a file name\n");
+		exit(1);
+	}
+
+	int fd = open(argv[1], O_RDONLY);
+	if (fd == -1) {
+		perror(argv[1]);
+		exit(1);
+	}
+	size_t n = read(fd, reply, sizeof(reply) - 1);
+	close(fd);
+	if (n <= 0) {
+		perror("read");
+		exit(1);
+	}
+	reply[n] = 0;
+
+	return !process_diary(0);
+}
+#endif
+
+/*
+ * Local Variables:
+ * compile-command: "cc -DSTANDALONE -DIMAP -O2 -Wall diary.c -o diary"
+ * End:
+ */
