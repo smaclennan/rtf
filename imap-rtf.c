@@ -197,8 +197,8 @@ static int filter(void)
 
 	while (fetchline(buff, sizeof(buff))) {
 		if (strncasecmp(buff, "To:", 3) == 0 ||
-				 strncasecmp(buff, "Cc:", 3) == 0 ||
-				 strncasecmp(buff, "Bcc:", 4) == 0) {
+			strncasecmp(buff, "Cc:", 3) == 0 ||
+			strncasecmp(buff, "Bcc:", 4) == 0) {
 			if (list_filter(buff, whitelist))
 				flags |= IS_HAM;
 			if ((e = list_filter(buff, folderlist)))
@@ -216,7 +216,8 @@ static int filter(void)
 				folder_match = e->folder;
 		} else if (strncasecmp(buff, "Date:", 5) == 0)
 			flags |= SAW_DATE;
-		else if (strncasecmp(buff, "List-Post:", 10) == 0) {
+		else if (strncasecmp(buff, "List-Post:", 10) == 0 ||
+				 strncasecmp(buff, "Reply-To:", 9) == 0) {
 			if ((e = list_filter(buff, folderlist)))
 				folder_match = e->folder;
 		} else if (strncasecmp(buff, "Return-Path:", 12) == 0) {
