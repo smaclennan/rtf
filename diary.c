@@ -184,11 +184,16 @@ static int process_vcal(struct dst_block *dst)
 
 	sprintf(dtstart, "%d/%d/%d %02d:%02d", month, day, year, hour, minute);
 
-	if ((p = strstr(dst->cur, "\nLOCATION")))
+	if ((p = strstr(dst->cur, "\nLOCATION"))) {
 		if ((p = strchr(p, ':'))) {
-			snprintf(location, sizeof(location), "%s", p + 1);
-			strtok(location, "\r\n");
+			++p;
+			// Deal with location with no location
+			if (*p != '\r' && *p != '\n') {
+				snprintf(location, sizeof(location), "%s", p);
+				strtok(location, "\r\n");
+			}
 		}
+	}
 
 	write_diary(dtstart, summary, location);
 
@@ -259,8 +264,9 @@ static int base64_decode(struct dst_block *dst, char *src)
 
 	while ((line = strtok(src, "\r\n"))) {
 		int len = strlen(line);
-		if (len & 3)
+		if (len & 3) {
 			return -1; // bad line
+		}
 		while (len >= 4) {
 			int n = decode_block(dst->cur, line);
 			if (n == -1) {
@@ -316,6 +322,13 @@ static int look_for_vcal(unsigned int uid)
 	else
 		end = strstr(p, "\n\n");
 	if (end) *(end + 1) = 0;
+
+	// Deal with possible part. -2 is to skip possible \r.
+	// part ends with -- so it is safe either way
+	if (*(end - 2) == '-') {
+		for (end -= 3; *end != '\r' && *end != '\n'; --end) ;
+		*end = 0;
+	}
 
 	dst.base = decode_buffer;
 	dst.cur = dst.base;
