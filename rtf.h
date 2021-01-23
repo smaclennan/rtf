@@ -43,9 +43,9 @@
 /* imap-rtf only */
 
 /* Largest buffer I have seen is just over 46k but I have received
- * vcalendar requests at work of 77k.
+ * vcalendar requests at work of over 256k.
  */
-#define BUFFER_SIZE (128 * 1024)
+#define BUFFER_SIZE (512 * 1024)
 
 // config.c
 struct entry {

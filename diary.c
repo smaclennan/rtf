@@ -70,7 +70,11 @@ static void write_diary(const char *dtstart,
 
 	close_diary(fd);
 }
+
+#define DBG_OUT(args...)
 #else
+int verbose;
+
 static void write_diary(const char *dtstart,
 						const char *summary,
 						const char *location)
@@ -79,6 +83,8 @@ static void write_diary(const char *dtstart,
 	if (location && *location)
 		printf("\t%s\n", location);
 }
+
+#define DBG_OUT(args...) printf(args)
 #endif
 
 static int tz_offset(char *base)
@@ -103,7 +109,10 @@ static int process_vcal(struct dst_block *dst)
 
 	// Limit to the vevent or we might get a false DTSTART
 	dst->cur = strstr(dst->base, "BEGIN:VEVENT");
-	if (!dst->cur) return -1;
+	if (!dst->cur) {
+		DBG_OUT("No BEGIN:VEVENT\n");
+		return -1;
+	}
 
 	char *p = strstr(dst->cur, "UID:");
 	if (p) {
@@ -157,19 +166,29 @@ static int process_vcal(struct dst_block *dst)
 	}
 
 	p = strstr(dst->cur, "\nDTSTART");
-	if (!p) return -1;
+	if (!p) {
+		DBG_OUT("No DTSTART\n");
+		return -1;
+	}
 
 	// Usually you get:
 	// DTSTART;TZID=Eastern Standard Time:20191213T100000
 	// but sometimes:
 	// DTSTART;TZID="(UTC-05:00) Eastern Time (US & Canada)":20191211T130000
 	char *e = strchr(p + 1, '\n');
-	if (!e) return -1;
+	if (!e) {
+		DBG_OUT("Bad DTSTART %d\n", __LINE__);
+		return -1;
+	}
 	while (*e != ':' && e > p) --e;
-	if (*e != ':') return -1;
+	if (*e != ':') {
+		DBG_OUT("Bad DTSTART %d\n", __LINE__);
+		return -1;
+	}
 
 	uint64_t date, time;
 	if (sscanf(e + 1, "%ldT%ld", &date, &time) != 2) {
+		DBG_OUT("Bad DTSTART %d\n", __LINE__);
 		logmsg(LOG_WARNING, "bad date %s", p);
 		return -1;
 	}
@@ -321,13 +340,15 @@ static int look_for_vcal(unsigned int uid)
 		end = strstr(p, "\n\r\n");
 	else
 		end = strstr(p, "\n\n");
-	if (end) *(end + 1) = 0;
+	if (end) {
+		*(end + 1) = 0;
 
-	// Deal with possible part. -2 is to skip possible \r.
-	// part ends with -- so it is safe either way
-	if (*(end - 2) == '-') {
-		for (end -= 3; *end != '\r' && *end != '\n'; --end) ;
-		*end = 0;
+		// Deal with possible part. -2 is to skip possible \r.
+		// part ends with -- so it is safe either way
+		if (*(end - 2) == '-') {
+			for (end -= 3; *end != '\r' && *end != '\n'; --end) ;
+			*end = 0;
+		}
 	}
 
 	dst.base = decode_buffer;
@@ -336,6 +357,9 @@ static int look_for_vcal(unsigned int uid)
 		logmsg(LOG_ERR, "Base64 decode failed for %u", uid);
 		return 0;
 	}
+
+	if (verbose)
+		puts(decode_buffer);
 
 	return 1;
 }
@@ -382,6 +406,13 @@ void logmsg(int type, const char *fmt, ...)
 /* diary < diary_file */
 int main(int argc, char *argv[])
 {
+	int c;
+
+	while ((c = getopt(argc, argv, "v")) != EOF)
+		switch (c) {
+		case 'v': ++verbose; break;
+		}
+
 	size_t n = read(0, reply, sizeof(reply) - 1);
 	if (n <= 0) {
 		perror("read");
@@ -395,6 +426,6 @@ int main(int argc, char *argv[])
 
 /*
  * Local Variables:
- * compile-command: "cc -DSTANDALONE -DIMAP -O2 -Wall diary.c -o diary"
+ * compile-command: "cc -DSTANDALONE -DIMAP -g -Wall diary.c -o diary"
  * End:
  */
