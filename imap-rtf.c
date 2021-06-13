@@ -572,5 +572,7 @@ int main(int argc, char *argv[])
 
 		if (dry_run)
 			exit(42);
+
+		logit('C', "Disconnect", time(NULL));
 	}
 }
