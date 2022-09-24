@@ -65,6 +65,8 @@ static int did_delete;
 static int reread_config;
 static unsigned cur_uid;
 
+static int is_connected;
+
 static void logit(char action, const char *subject, unsigned cur_uid)
 {
 	if (use_stderr) {
@@ -329,9 +331,12 @@ int check_folders(void)
 	return rc;
 }
 
-static void need_reread(int signo)
+static void sighandler(int signo)
 {
-	reread_config = 1;
+	if (signo == SIGUSR1)
+		reread_config = 1;
+	else
+		syslog(LOG_INFO, "%s", is_connected ? "Connected" : "Disconnected");
 }
 
 static int build_list(void)
@@ -535,7 +540,8 @@ int main(int argc, char *argv[])
 	if (just_checking)
 		return check_folders();
 
-	signal(SIGUSR1, need_reread);
+	signal(SIGUSR1, sighandler);
+	signal(SIGUSR2, sighandler);
 
 	read_last_seen();
 
@@ -565,7 +571,9 @@ int main(int argc, char *argv[])
 			do_daemon = 0;
 		}
 
+		is_connected = 1;
 		run();
+		is_connected = 0;
 
 		ssl_close();
 		close(sock);
