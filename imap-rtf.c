@@ -75,6 +75,9 @@ static void logit(char action, const char *subject, unsigned cur_uid)
 		return;
 	}
 
+	if (action == 'C')
+		syslog(LOG_INFO, "%s", subject);
+
 	if (!logfile || dry_run)
 		return;
 	if (!log_verbose && (action == 'h' || action == 'H'))
@@ -540,8 +543,7 @@ int main(int argc, char *argv[])
 	read_last_seen();
 
 	// Log the start
-	sprintf(reply, "Start %d", getpid());
-	logit('C', reply, time(NULL));
+	logit('C', "Start", time(NULL));
 
 	while (1) {
 		int sock = connect_to_server(get_global("server"),
