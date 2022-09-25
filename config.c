@@ -53,7 +53,7 @@ int get_global_num(const char *glob)
 	return 0;
 }
 
-static int add_entry(struct entry **head, char *str)
+int add_entry(struct entry **head, char *str)
 {
 	char *p = NULL;
 	int need_p = 0;
@@ -249,6 +249,9 @@ int read_config(void)
 	check_list(&graylist);
 	check_list(&blacklist);
 	check_list(&folderlist);
+
+	// If needed, un-obfuscate password and create passwd entry
+	unobfuscate(get_global("password"));
 
 	if (!get_global("server") ||
 		get_global_num("port") == 0 ||

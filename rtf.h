@@ -73,6 +73,9 @@ const char *get_global(const char *glob);
 int get_global_num(const char *glob);
 int read_config(void);
 void logmsg(int type, const char *fmt, ...);
+int add_entry(struct entry **head, char *str);
+
+void unobfuscate(const char *encoded);
 
 // bear.c
 int ssl_open(int sock, const char *host);
