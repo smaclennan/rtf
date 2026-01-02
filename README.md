@@ -48,3 +48,5 @@ cert-root. A good way to test the certs is with brssl provided by
 BearSSL. In my case:
 
     brssl verify -CA ~/.rtf.d/cert-root ~/.rtf.d/cert
+
+claws-mail: Get the certs from ~/.claws-mail/certs/<url>.<port>.cert.chain
