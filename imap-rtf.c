@@ -538,8 +538,6 @@ int main(int argc, char *argv[])
 	if (just_checking)
 		return check_folders();
 
-	signal(SIGUSR1, need_reread);
-
 	read_last_seen();
 
 	// Log the start
@@ -561,11 +559,17 @@ int main(int argc, char *argv[])
 		logit('C', "Connect", time(NULL));
 
 		if (do_daemon) {
+			// Deal with signals
+			for (int i = 1; i <= SIGRTMAX; ++i)
+				signal(i, SIG_IGN);
+
 			// Only go daemon if connected
 			if (daemon(1, 0))
 				logmsg(LOG_ERR, "daemon: %s", strerror(errno));
 			do_daemon = 0;
 		}
+
+		signal(SIGUSR1, need_reread);
 
 		run();
 
